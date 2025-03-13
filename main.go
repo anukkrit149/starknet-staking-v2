@@ -1,64 +1,46 @@
 package main
 
-import (
-	"context"
-	"log"
-	"math/big"
+import "github.com/NethermindEth/juno/core/felt"
 
-	"github.com/NethermindEth/juno/core/felt"
-	"github.com/NethermindEth/starknet.go/account"
-	"github.com/NethermindEth/starknet.go/rpc"
-)
+type AccountData struct {
+	address string
+	privKey string
+	pubKey  string
+}
 
-// The general worklfow would be to:
-// 1. Listen for a block where you have to make the attestation
-//    - How much do you have to ask for a block number, do you have to ask every one second?
-// 2. Make the attestation. Verify the transaction got included
-//    - How do you verify a transaction got included, verifying the latest block
-// Repeat until the next epoch
-// How do we know there was an epoch change?
+// struct should be (un)marshallable
+type Config struct {
+	providerUrl string
+	accountData AccountData
+}
 
 func main() {
-	var providerURL string
-	provider, err := rpc.NewProvider(providerURL)
-	if err != nil {
-		log.Fatalf("Error connecting to RPC provider at %s: %s", providerURL, err)
-	}
+	var config Config // read from somwere
 
-	var publicKey string
-	var privateKey big.Int
-	ks := account.NewMemKeystore()
-	ks.Put(publicKey, &privateKey)
+	provider := NewProvider(config.providerUrl)
 
-	var accountAddr felt.Felt
-	account, err := account.NewAccount(provider, &accountAddr, publicKey, ks, 1)
-	if err != nil {
-		log.Fatalf("Cannot create new account: %s", err)
-	}
+	account := NewAccount(provider, &config.accountData)
 
-	// At this point, communication with the provider should be set
+    // Validator address should be part of config?
+    // Validator staked funds should be also obtained here
 
-	nonce, err := account.Nonce(context.Background(), rpc.BlockID{Tag: "latest"}, account.AccountAddress)
-	if err != nil {
-		log.Fatalf("Cannot get account nonce: %s", err)
-	}
+	dispatcher := NewEventDispatcher()
+	go dispatcher.Dispatch(provider, account, , )
+	// I have to make sure this function closes at the end
 
-	// Create the function call first
+	// ------
 
-	invoke := rpc.BroadcastInvokev3Txn{
-		InvokeTxnV3: rpc.InvokeTxnV3{
-			Type:          rpc.TransactionType_Invoke,
-			SenderAddress: account.AccountAddress,
-			// Calldata: ,
-			Version: rpc.TransactionV3,
-			// Signature: ,
-			Nonce: nonce,
-			// ResourceBounds: ,
-			// Tip: rpc.U64,
-			// leaving the rest uninitialized
-		},
-	}
+	// Here I need to subscribe to the blok headers and track them
+	// Once I get a new header, I have to check if I should do an attestation for it
+	// If yes, send an AttestRequired event with the necesary information
 
-	// we shouldn't need to estimate the fee because we would use be doing the same transaction
+	// I've also need to check if the staked amount of the validator changes
+	// The solution here is to subscribe to a possible event emitting
+	// If it happens, send a StakeUpdated event with the necesary information
 
+	// I've also would like to check the balance of the address from time to time to verify
+	// that they have enough money for the next 10 attestation (value modifiable by user)
+	// Once it goes below it, the console
+	// should start giving warnings
+	// This the least prio but we should implement nonetheless
 }
