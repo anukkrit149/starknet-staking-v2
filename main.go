@@ -21,11 +21,11 @@ func main() {
 
 	account := NewAccount(provider, &config.accountData)
 
-    // Validator address should be part of config?
-    // Validator staked funds should be also obtained here
+	validator := Address(felt.Felt{})
+	staked := staked(&validator)
 
 	dispatcher := NewEventDispatcher()
-	go dispatcher.Dispatch(provider, account, , )
+	go dispatcher.Dispatch(provider, account, &validator, &staked)
 	// I have to make sure this function closes at the end
 
 	// ------
@@ -43,4 +43,6 @@ func main() {
 	// Once it goes below it, the console
 	// should start giving warnings
 	// This the least prio but we should implement nonetheless
+
+	// Should also track re-org and check if the re-org means we have to attest again or not
 }

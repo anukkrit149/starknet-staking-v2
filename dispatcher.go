@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/NethermindEth/juno/core/felt"
 	"github.com/NethermindEth/starknet.go/account"
 	"github.com/NethermindEth/starknet.go/rpc"
 )
+
+const defaultAttestDelay = 10
 
 // Keep track of the stake amount through the different epochs
 // Because there is a latency the most current stake doesn't need to match
@@ -46,8 +49,8 @@ func NewEventDispatcher() EventDispatcher {
 func (d *EventDispatcher) Dispatch(
 	provider *rpc.Provider,
 	account *account.Account,
-	stakedAmount felt.Felt,
-	validatorAddress felt.Felt,
+	validator *Address,
+	stakedAmount *Balance,
 ) {
 	var currentEpoch uint64
 	stakedAmountPerEpoch := NewStakedAmount()
@@ -58,17 +61,13 @@ func (d *EventDispatcher) Dispatch(
 			break
 		}
 		stakedAmountPerEpoch.Get(currentEpoch)
-		resp, err := invokeAttest(provider, account, &event)
+		resp, err := invokeAttest(account, &event)
 		if err != nil {
-			// Here you want to wait a few seconds and repeat the attestation
+			// throw a detailed error of what happened
+			// and
+			go repeatAttest(d.AttestRequired, event, defaultAttestDelay)
 		}
-		// do something with response. On a separate go function
-		// Have it checked that is included in pending block
-		// Have it checked that it was included in the latest block (success, close the goroutine)
-		// ---
-		// If not included, what do we do, TBD
-		// ---
-		// If resp reverted give an error
+		go trackAttest(provider, d.AttestRequired, event, resp)
 
 	case event, ok := <-d.StakeUpdated:
 		if !ok {
@@ -79,7 +78,7 @@ func (d *EventDispatcher) Dispatch(
 }
 
 func invokeAttest(
-	provider *rpc.Provider, account *account.Account, attest *AttestRequired,
+	account *account.Account, attest *AttestRequired,
 ) (*rpc.TransactionResponse, error) {
 	// Todo this might be worth doing async
 	nonce, err := nonce(account)
@@ -109,7 +108,7 @@ func invokeAttest(
 			// ResourceBounds: ,
 			// Tip: rpc.U64, // Investigate if this is applicable, perhaps it can be a way of
 			//               // prioritizing this transaction if there is congestion
-			// PayMasterData: , // I don't know if this is applicable, investigate
+			// PayMasterData: , // I don't know if this is applicable, investigate. Maybe not in v1
 			// AccountDeploymentData: , // It shouldn't be required
 			// NonceDataMode: , // Investigate what goes here
 			// FeeMode: , // Investigate
@@ -122,4 +121,68 @@ func invokeAttest(
 	}
 
 	return account.SendTransaction(context.Background(), invoke)
+}
+
+// Repeat an Attest event after the `delay` in seconds
+func repeatAttest(attestChan chan AttestRequired, event AttestRequired, delay uint64) {
+	time.Sleep(time.Second * time.Duration(delay))
+	attestChan <- event
+}
+
+// do something with response
+// Have it checked that is included in pending block
+// Have it checked that it was included in the latest block (success, close the goroutine)
+// ---
+// If not included, then what was the reason? Try to include it again
+// ---
+// If the transaction was actually reverted log it and repeat the attestation
+func trackAttest(
+	provider *rpc.Provider,
+	attestChan chan AttestRequired,
+	event AttestRequired,
+	txResp *rpc.TransactionResponse,
+) {
+	startTime := time.Now()
+	txStatus, err := trackTransactionStatus(provider, txResp.TransactionHash)
+	if err != nil {
+		// log exactly what's the error
+
+		elapsedTime := time.Now().Sub(startTime).Seconds()
+		var attestDelay uint64
+		if elapsedTime < defaultAttestDelay {
+			attestDelay = defaultAttestDelay - uint64(elapsedTime)
+		}
+		repeatAttest(attestChan, event, attestDelay)
+		return
+	}
+
+	if txStatus.FinalityStatus == rpc.TxnStatus_Rejected {
+		// log exactly the rejection and why was it
+
+		repeatAttest(attestChan, event, defaultAttestDelay)
+		return
+	}
+
+	// if we got here, then the transaction status was accepted
+}
+
+func trackTransactionStatus(provider *rpc.Provider, txHash *felt.Felt) (*rpc.TxnStatusResp, error) {
+	elapsedSeconds := 0
+	const maxSeconds = defaultAttestDelay
+	for elapsedSeconds < defaultAttestDelay {
+		txStatus, err := provider.GetTransactionStatus(context.Background(), txHash)
+		if err != nil {
+			return nil, err
+		}
+		if txStatus.FinalityStatus != rpc.TxnStatus_Received {
+			return txStatus, nil
+		}
+		time.Sleep(time.Second)
+		elapsedSeconds++
+	}
+
+	// If we are here, it means the transaction didn't change it's status for a long time.
+	// Should we track again?
+	// Should we have a finite number of tries?
+	return trackTransactionStatus(provider, txHash)
 }

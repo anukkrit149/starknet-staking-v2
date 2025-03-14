@@ -40,6 +40,17 @@ func NewAccount(provider *rpc.Provider, accountData *AccountData) *account.Accou
 	return account
 }
 
+// Given a validator address returns the staked amount
+func staked(address *Address) Balance {
+	return Balance{}
+}
+
+// Given an address returns it's balance
+func balance(address *Address) Balance {
+	return Balance{}
+}
+
+// Given an account, returns it's nonce
 func nonce(account *account.Account) (*felt.Felt, error) {
 	return account.Nonce(context.Background(), rpc.BlockID{Tag: "latest"}, account.AccountAddress)
 }
