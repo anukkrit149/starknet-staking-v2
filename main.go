@@ -1,6 +1,13 @@
 package main
 
-import "github.com/NethermindEth/juno/core/felt"
+import (
+	"fmt"
+	"log"
+
+	"github.com/NethermindEth/juno/core/crypto"
+	"github.com/NethermindEth/juno/core/felt"
+	"github.com/NethermindEth/starknet.go/account"
+)
 
 type AccountData struct {
 	address string
@@ -15,7 +22,7 @@ type Config struct {
 }
 
 func main() {
-	var config Config // read from somwere
+	var config Config // read from somewhere: from CLI ?
 
 	provider := NewProvider(config.providerUrl)
 
@@ -30,10 +37,48 @@ func main() {
 
 	// ------
 
-	// Here I need to subscribe to the blok headers and track them
-	// Once I get a new header, I have to check if I should do an attestation for it
-	// If yes, send an AttestRequired event with the necesary information
+	// Initially, fetch necessary info
+	//
+	// Note 1 (attest info): No need to listen to real-time events, and fetching once per epoch should work,
+	// as any important updates (ie, related to stake & epoch_length) are effective only from the next epoch!
+	//
+	// Note 2 (attest window): Depending on the expected behaviour of attestation window, we might have to listen to `AttestationWindowChanged` event
+	attestationInfo, attestationWindow, blockNumberToAttestTo := fetchEpochInfo(account)
 
+	// Subscribe to the block headers
+	blockHeaderChan := make(chan BlockHeader) // could maybe make it buffered to allow for margin?
+	go subscribeToBlockHeaders(config.providerUrl, blockHeaderChan)
+
+	for blockHeader := range blockHeaderChan {
+		fmt.Println("Block header:", blockHeader)
+
+		// Refetch epoch info on new epoch (validity guaranteed for 1 epoch even if updates are made)
+		if blockHeader.Number == attestationInfo.CurrentEpochStartingBlock+attestationInfo.EpochLen {
+			previousEpochInfo := attestationInfo
+
+			attestationInfo, attestationWindow, blockNumberToAttestTo = fetchEpochInfo(account)
+			// Sanity check
+			if attestationInfo.EpochId != previousEpochInfo.EpochId+1 ||
+				attestationInfo.CurrentEpochStartingBlock != previousEpochInfo.CurrentEpochStartingBlock+previousEpochInfo.EpochLen {
+				log.Fatal("Wrong epoch change...")
+			}
+		}
+
+		// Send an attestation if necessary
+		if blockHeader.Number == blockNumberToAttestTo {
+			// TODO: should actually send the `AttestRequired` event from: now + MIN_ATTESTATION_WINDOW !
+			// and dispatcher can retry until: now + attestationWindow
+			// --> might need to revise project architecture ?
+			// --> maybe use a Map<now + MIN_ATTESTATION_WINDOW, blockHash> to check at each new block if need to send an event
+			dispatcher.AttestRequired <- AttestRequired{
+				blockHash: blockHeader.Hash,
+				window:    attestationWindow,
+			}
+		}
+	}
+
+	// --> I think we don't need to listen to stake events, we can get it when fetching AttestationInfo
+	//
 	// I've also need to check if the staked amount of the validator changes
 	// The solution here is to subscribe to a possible event emitting
 	// If it happens, send a StakeUpdated event with the necesary information
@@ -45,4 +90,30 @@ func main() {
 	// This the least prio but we should implement nonetheless
 
 	// Should also track re-org and check if the re-org means we have to attest again or not
+}
+
+func fetchEpochInfo(account *account.Account) (AttestationInfo, uint8, uint64) {
+	attestationInfo := fetchAttestationInfo(account)
+	attestationWindow := fetchAttestationWindow(account)
+	blockNumberToAttestTo := computeBlockNumberToAttestTo(account, attestationInfo, attestationWindow)
+
+	return attestationInfo, attestationWindow, blockNumberToAttestTo
+}
+
+func computeBlockNumberToAttestTo(account *account.Account, attestationInfo AttestationInfo, attestationWindow uint8) uint64 {
+	startingBlock := attestationInfo.CurrentEpochStartingBlock + attestationInfo.EpochLen
+
+	// TODO: might be hash(stake, hash(epoch_id, address))
+	// or should we use PoseidonArray instead ?
+	hash := crypto.Poseidon(
+		crypto.Poseidon(
+			new(felt.Felt).SetBigInt(&attestationInfo.Stake),
+			new(felt.Felt).SetUint64(attestationInfo.EpochId),
+		),
+		account.AccountAddress,
+	)
+	// TODO: hash (felt) might not fit into a uint64 --> use big.Int in that case ?
+	blockOffset := hash.Uint64() % (attestationInfo.EpochLen - uint64(attestationWindow))
+
+	return startingBlock + blockOffset
 }
