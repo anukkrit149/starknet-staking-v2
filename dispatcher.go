@@ -55,25 +55,27 @@ func (d *EventDispatcher) Dispatch(
 	var currentEpoch uint64
 	stakedAmountPerEpoch := NewStakedAmount()
 
-	select {
-	case event, ok := <-d.AttestRequired:
-		if !ok {
-			break
-		}
-		stakedAmountPerEpoch.Get(currentEpoch)
-		resp, err := invokeAttest(account, &event)
-		if err != nil {
-			// throw a detailed error of what happened
-			// and
-			go repeatAttest(d.AttestRequired, event, defaultAttestDelay)
-		}
-		go trackAttest(provider, d.AttestRequired, event, resp)
+	for {
+		select {
+		case event, ok := <-d.AttestRequired:
+			if !ok {
+				break
+			}
+			stakedAmountPerEpoch.Get(currentEpoch)
+			resp, err := invokeAttest(account, &event)
+			if err != nil {
+				// throw a detailed error of what happened
+				// and
+				go repeatAttest(d.AttestRequired, event, defaultAttestDelay)
+			}
+			go trackAttest(provider, d.AttestRequired, event, resp)
 
-	case event, ok := <-d.StakeUpdated:
-		if !ok {
-			break
+		case event, ok := <-d.StakeUpdated:
+			if !ok {
+				break
+			}
+			stakedAmountPerEpoch.Update(&event)
 		}
-		stakedAmountPerEpoch.Update(&event)
 	}
 }
 
