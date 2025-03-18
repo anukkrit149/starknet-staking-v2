@@ -107,7 +107,7 @@ func computeBlockNumberToAttestTo(account *account.Account, attestationInfo Atte
 	// or should we use PoseidonArray instead ?
 	hash := crypto.Poseidon(
 		crypto.Poseidon(
-			new(felt.Felt).SetBigInt(&attestationInfo.Stake),
+			new(felt.Felt).SetBigInt(attestationInfo.Stake.Big()),
 			new(felt.Felt).SetUint64(attestationInfo.EpochId),
 		),
 		account.AccountAddress,

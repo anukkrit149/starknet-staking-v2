@@ -1,14 +1,13 @@
 package main
 
 import (
-	"math/big"
-
 	"github.com/NethermindEth/juno/core/felt"
+	"lukechampine.com/uint128"
 )
 
 type Address felt.Felt
 
-type Balance struct{}
+type Balance felt.Felt
 
 // HeadersSubscriptionResponse is the response from the subscription to new block headers
 type HeadersSubscriptionResponse struct {
@@ -41,9 +40,9 @@ type GasPrice struct {
 
 // AttestationInfo is the response from the get_attestation_info_by_operational_address
 type AttestationInfo struct {
-	StakerAddress             Address `json:"staker_address"`
-	Stake                     big.Int `json:"stake"` // uin128, maybe use felt? or custom uint128 struct ?
-	EpochLen                  uint64  `json:"epoch_len"`
-	EpochId                   uint64  `json:"epoch_id"`
-	CurrentEpochStartingBlock uint64  `json:"current_epoch_starting_block"`
+	StakerAddress             Address         `json:"staker_address"`
+	Stake                     uint128.Uint128 `json:"stake"`
+	EpochLen                  uint64          `json:"epoch_len"`
+	EpochId                   uint64          `json:"epoch_id"`
+	CurrentEpochStartingBlock uint64          `json:"current_epoch_starting_block"`
 }

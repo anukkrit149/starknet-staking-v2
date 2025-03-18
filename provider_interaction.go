@@ -12,6 +12,7 @@ import (
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/NethermindEth/starknet.go/utils"
 	"github.com/gorilla/websocket"
+	"lukechampine.com/uint128"
 )
 
 func NewProvider(providerUrl string) *rpc.Provider {
@@ -128,9 +129,10 @@ func fetchAttestationInfo(account *account.Account) AttestationInfo {
 	}
 
 	// TODO: verify once endpoint is available
+	stake := result[1].Bits()
 	return AttestationInfo{
 		StakerAddress:             Address(*result[0]),
-		Stake:                     *result[1].BigInt(&big.Int{}),
+		Stake:                     uint128.Uint128{Lo: stake[0], Hi: stake[1]},
 		EpochLen:                  result[2].Uint64(),
 		EpochId:                   result[3].Uint64(),
 		CurrentEpochStartingBlock: result[4].Uint64(),
