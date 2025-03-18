@@ -93,7 +93,6 @@ func invokeAttest(
 		return nil, err
 	}
 
-	attestationContractAddress, _ := new(felt.Felt).SetString(ATTESTATION_CONTRACT_ADDRESS)
 	fnCall := rpc.FunctionCall{
 		ContractAddress:    attestationContractAddress,
 		EntryPointSelector: utils.GetSelectorFromNameFelt("attest"),

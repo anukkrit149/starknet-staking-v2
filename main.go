@@ -22,7 +22,7 @@ type Config struct {
 }
 
 func main() {
-	var config Config // read from somewhere: from CLI ?
+	var config Config // read from somewhere
 
 	provider := NewProvider(config.providerUrl)
 
@@ -43,7 +43,10 @@ func main() {
 	// as any important updates (ie, related to stake & epoch_length) are effective only from the next epoch!
 	//
 	// Note 2 (attest window): Depending on the expected behaviour of attestation window, we might have to listen to `AttestationWindowChanged` event
-	attestationInfo, attestationWindow, blockNumberToAttestTo := fetchEpochInfo(account)
+	attestationInfo, attestationWindow, blockNumberToAttestTo, err := fetchEpochInfo(account)
+	if err != nil {
+		// TODO: implement a retry mechanism ?
+	}
 
 	// Subscribe to the block headers
 	blockHeaderChan := make(chan BlockHeader) // could maybe make it buffered to allow for margin?
@@ -56,7 +59,11 @@ func main() {
 		if blockHeader.Number == attestationInfo.CurrentEpochStartingBlock+attestationInfo.EpochLen {
 			previousEpochInfo := attestationInfo
 
-			attestationInfo, attestationWindow, blockNumberToAttestTo = fetchEpochInfo(account)
+			attestationInfo, attestationWindow, blockNumberToAttestTo, err = fetchEpochInfo(account)
+			if err != nil {
+				// TODO: implement a retry mechanism ?
+			}
+
 			// Sanity check
 			if attestationInfo.EpochId != previousEpochInfo.EpochId+1 ||
 				attestationInfo.CurrentEpochStartingBlock != previousEpochInfo.CurrentEpochStartingBlock+previousEpochInfo.EpochLen {
@@ -92,12 +99,20 @@ func main() {
 	// Should also track re-org and check if the re-org means we have to attest again or not
 }
 
-func fetchEpochInfo(account *account.Account) (AttestationInfo, uint8, uint64) {
-	attestationInfo := fetchAttestationInfo(account)
-	attestationWindow := fetchAttestationWindow(account)
+func fetchEpochInfo(account *account.Account) (AttestationInfo, uint8, uint64, error) {
+	attestationInfo, attestInfoErr := fetchAttestationInfo(account)
+	if attestInfoErr != nil {
+		return AttestationInfo{}, 0, 0, attestInfoErr
+	}
+
+	attestationWindow, windowErr := fetchAttestationWindow(account)
+	if windowErr != nil {
+		return AttestationInfo{}, 0, 0, windowErr
+	}
+
 	blockNumberToAttestTo := computeBlockNumberToAttestTo(account, attestationInfo, attestationWindow)
 
-	return attestationInfo, attestationWindow, blockNumberToAttestTo
+	return attestationInfo, attestationWindow, blockNumberToAttestTo, nil
 }
 
 func computeBlockNumberToAttestTo(account *account.Account, attestationInfo AttestationInfo, attestationWindow uint8) uint64 {

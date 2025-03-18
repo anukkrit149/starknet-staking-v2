@@ -71,7 +71,8 @@ func subscribeToBlockHeaders(providerUrl string, blockHeaderChan chan<- BlockHea
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	defer conn.Close()
 	if err != nil {
-		log.Fatal("Error connecting to WebSocket:", err)
+		fmt.Println("Error connecting to WebSocket:", err)
+		// TODO: implement a retry mechanism ?
 	}
 
 	// JSON RPC request to subscribe to new block headers
@@ -83,7 +84,8 @@ func subscribeToBlockHeaders(providerUrl string, blockHeaderChan chan<- BlockHea
 
 	// Send the subscription request
 	if err := conn.WriteMessage(websocket.TextMessage, []byte(subscribeMessage)); err != nil {
-		log.Fatal("Error sending subscription request:", err)
+		fmt.Println("Error sending subscription request:", err)
+		// TODO: implement a retry mechanism ?
 	}
 
 	// TODO: implement a logger
@@ -94,8 +96,10 @@ func subscribeToBlockHeaders(providerUrl string, blockHeaderChan chan<- BlockHea
 		msgType, msgBytes, err := conn.ReadMessage()
 		fmt.Println("Message type:", msgType)
 		if err != nil {
-			log.Fatal("Error reading message:", err)
+			fmt.Println("Error reading message:", err)
+			// TODO: implement a retry mechanism ?
 		}
+
 		// TODO: in logger
 		// fmt.Println("New block header:", string(msgBytes))
 
@@ -108,9 +112,7 @@ func subscribeToBlockHeaders(providerUrl string, blockHeaderChan chan<- BlockHea
 	}
 }
 
-func fetchAttestationInfo(account *account.Account) AttestationInfo {
-	stakingContractAddress, _ := new(felt.Felt).SetString(STAKING_CONTRACT_ADDRESS)
-
+func fetchAttestationInfo(account *account.Account) (AttestationInfo, error) {
 	functionCall := rpc.FunctionCall{
 		ContractAddress:    stakingContractAddress,
 		EntryPointSelector: utils.GetSelectorFromNameFelt("get_attestation_info_by_operational_address"),
@@ -119,13 +121,11 @@ func fetchAttestationInfo(account *account.Account) AttestationInfo {
 
 	result, err := account.Call(context.Background(), functionCall, rpc.BlockID{Tag: "latest"})
 	if err != nil {
-		log.Fatal("Error calling function:", err)
-		//TODO: retry ?
+		return AttestationInfo{}, entrypointInternalError("get_attestation_info_by_operational_address", err)
 	}
 
 	if len(result) != 5 {
-		log.Fatal("Invalid response from function call")
-		//TODO: retry ?
+		return AttestationInfo{}, entrypointResponseError("get_attestation_info_by_operational_address")
 	}
 
 	// TODO: verify once endpoint is available
@@ -136,12 +136,10 @@ func fetchAttestationInfo(account *account.Account) AttestationInfo {
 		EpochLen:                  result[2].Uint64(),
 		EpochId:                   result[3].Uint64(),
 		CurrentEpochStartingBlock: result[4].Uint64(),
-	}
+	}, nil
 }
 
-func fetchAttestationWindow(account *account.Account) uint8 {
-	attestationContractAddress, _ := new(felt.Felt).SetString(ATTESTATION_CONTRACT_ADDRESS)
-
+func fetchAttestationWindow(account *account.Account) (uint8, error) {
 	result, err := account.Call(
 		context.Background(),
 		rpc.FunctionCall{
@@ -153,19 +151,17 @@ func fetchAttestationWindow(account *account.Account) uint8 {
 	)
 
 	if err != nil {
-		log.Fatal("Error calling function:", err)
-		//TODO: retry ?
+		return 0, entrypointInternalError("attestation_window", err)
 	}
 
 	if len(result) != 1 {
-		log.Fatal("Invalid response from function call")
-		//TODO: retry ?
+		return 0, entrypointResponseError("attestation_window")
 	}
 
-	return uint8(result[0].Uint64())
+	return uint8(result[0].Uint64()), nil
 }
 
-func fetchValidatorBalance(account *account.Account) big.Int {
+func fetchValidatorBalance(account *account.Account) (Balance, error) {
 	sepoliaStrkTokenAddress, _ := new(felt.Felt).SetString(SEPOLIA_TOKENS.Strk)
 
 	result, err := account.Call(
@@ -179,14 +175,12 @@ func fetchValidatorBalance(account *account.Account) big.Int {
 	)
 
 	if err != nil {
-		log.Fatal("Error calling function:", err)
-		//TODO: retry ?
+		return Balance{}, entrypointInternalError("balanceOf", err)
 	}
 
 	if len(result) != 1 {
-		log.Fatal("Invalid response from function call")
-		//TODO: retry ?
+		return Balance{}, entrypointResponseError("balanceOf")
 	}
 
-	return *result[0].BigInt(&big.Int{})
+	return Balance(*result[0]), nil
 }
