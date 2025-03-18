@@ -8,6 +8,7 @@ import (
 	"math/big"
 
 	"github.com/NethermindEth/juno/core/felt"
+	rpcv8 "github.com/NethermindEth/juno/rpc/v8"
 	"github.com/NethermindEth/starknet.go/account"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/NethermindEth/starknet.go/utils"
@@ -63,7 +64,7 @@ func nonce(account *account.Account) (*felt.Felt, error) {
 }
 
 // Subscribe to block headers
-func subscribeToBlockHeaders(providerUrl string, blockHeaderChan chan<- BlockHeader) {
+func subscribeToBlockHeaders(providerUrl string, blockHeaderChan chan<- rpcv8.BlockHeader) {
 	// Take the providerUrl parts (host & port) and build the ws url
 	wsURL := "ws://" + "localhost" + ":" + "6061" + "/v0_8"
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/NethermindEth/juno/core/crypto"
 	"github.com/NethermindEth/juno/core/felt"
+	rpcv8 "github.com/NethermindEth/juno/rpc/v8"
 	"github.com/NethermindEth/starknet.go/account"
 )
 
@@ -49,14 +50,14 @@ func main() {
 	}
 
 	// Subscribe to the block headers
-	blockHeaderChan := make(chan BlockHeader) // could maybe make it buffered to allow for margin?
+	blockHeaderChan := make(chan rpcv8.BlockHeader) // could maybe make it buffered to allow for margin?
 	go subscribeToBlockHeaders(config.providerUrl, blockHeaderChan)
 
 	for blockHeader := range blockHeaderChan {
 		fmt.Println("Block header:", blockHeader)
 
 		// Refetch epoch info on new epoch (validity guaranteed for 1 epoch even if updates are made)
-		if blockHeader.Number == attestationInfo.CurrentEpochStartingBlock+attestationInfo.EpochLen {
+		if *blockHeader.Number == attestationInfo.CurrentEpochStartingBlock+attestationInfo.EpochLen {
 			previousEpochInfo := attestationInfo
 
 			attestationInfo, attestationWindow, blockNumberToAttestTo, err = fetchEpochInfo(account)
@@ -72,7 +73,7 @@ func main() {
 		}
 
 		// Send an attestation if necessary
-		if blockHeader.Number == blockNumberToAttestTo {
+		if *blockHeader.Number == blockNumberToAttestTo {
 			// TODO: should actually send the `AttestRequired` event from: now + MIN_ATTESTATION_WINDOW !
 			// and dispatcher can retry until: now + attestationWindow
 			// --> might need to revise project architecture ?

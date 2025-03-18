@@ -32,7 +32,7 @@ func (s *stakedAmount) Get(epoch uint64) {
 
 // requires filling with the right values
 type AttestRequired struct {
-	blockHash felt.Felt
+	blockHash *felt.Felt
 	window    uint8
 }
 
@@ -96,7 +96,7 @@ func invokeAttest(
 	fnCall := rpc.FunctionCall{
 		ContractAddress:    attestationContractAddress,
 		EntryPointSelector: utils.GetSelectorFromNameFelt("attest"),
-		Calldata:           []*felt.Felt{&attest.blockHash},
+		Calldata:           []*felt.Felt{attest.blockHash},
 	}
 
 	invokeCalldata, err := account.FmtCalldata([]rpc.FunctionCall{fnCall})
