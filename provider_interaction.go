@@ -163,8 +163,6 @@ func fetchAttestationWindow(account *account.Account) (uint8, error) {
 }
 
 func fetchValidatorBalance(account *account.Account) (Balance, error) {
-	sepoliaStrkTokenAddress, _ := new(felt.Felt).SetString(SEPOLIA_TOKENS.Strk)
-
 	result, err := account.Call(
 		context.Background(),
 		rpc.FunctionCall{
