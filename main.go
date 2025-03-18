@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/NethermindEth/juno/core/crypto"
 	"github.com/NethermindEth/juno/core/felt"
@@ -68,7 +67,8 @@ func main() {
 			// Sanity check
 			if attestationInfo.EpochId != previousEpochInfo.EpochId+1 ||
 				attestationInfo.CurrentEpochStartingBlock != previousEpochInfo.CurrentEpochStartingBlock+previousEpochInfo.EpochLen {
-				log.Fatal("Wrong epoch change...")
+				fmt.Println("Wrong epoch change: from %s to %s", previousEpochInfo, attestationInfo)
+				// TODO: what should we do ?
 			}
 		}
 
