@@ -33,13 +33,14 @@ func NewAccount(provider *rpc.Provider, accountData *AccountData) *account.Accou
 	// place holder need to change
 	var publicKey string
 	var privateKey big.Int
-	var accountAddr felt.Felt
+	var accountAddr Address
 	// ----------------------------
 
 	ks := account.NewMemKeystore()
 	ks.Put(publicKey, &privateKey)
 
-	account, err := account.NewAccount(provider, &accountAddr, publicKey, ks, 2)
+	accountAddrFelt := accountAddr.ToFelt()
+	account, err := account.NewAccount(provider, &accountAddrFelt, publicKey, ks, 2)
 	if err != nil {
 		log.Fatalf("Cannot create new account: %s", err)
 	}
@@ -114,8 +115,10 @@ func subscribeToBlockHeaders(providerUrl string, blockHeaderChan chan<- rpcv8.Bl
 }
 
 func fetchAttestationInfo(account *account.Account) (AttestationInfo, error) {
+	contractAddrFelt := attestationContractAddress.ToFelt()
+
 	functionCall := rpc.FunctionCall{
-		ContractAddress:    stakingContractAddress,
+		ContractAddress:    &contractAddrFelt,
 		EntryPointSelector: utils.GetSelectorFromNameFelt("get_attestation_info_by_operational_address"),
 		Calldata:           []*felt.Felt{account.AccountAddress},
 	}
@@ -136,15 +139,17 @@ func fetchAttestationInfo(account *account.Account) (AttestationInfo, error) {
 		Stake:                     uint128.Uint128{Lo: stake[0], Hi: stake[1]},
 		EpochLen:                  result[2].Uint64(),
 		EpochId:                   result[3].Uint64(),
-		CurrentEpochStartingBlock: result[4].Uint64(),
+		CurrentEpochStartingBlock: BlockNumber(result[4].Uint64()),
 	}, nil
 }
 
-func fetchAttestationWindow(account *account.Account) (uint8, error) {
+func fetchAttestationWindow(account *account.Account) (uint64, error) {
+	contractAddrFelt := attestationContractAddress.ToFelt()
+
 	result, err := account.Call(
 		context.Background(),
 		rpc.FunctionCall{
-			ContractAddress:    attestationContractAddress,
+			ContractAddress:    &contractAddrFelt,
 			EntryPointSelector: utils.GetSelectorFromNameFelt("attestation_window"),
 			Calldata:           []*felt.Felt{},
 		},
@@ -159,14 +164,16 @@ func fetchAttestationWindow(account *account.Account) (uint8, error) {
 		return 0, entrypointResponseError("attestation_window")
 	}
 
-	return uint8(result[0].Uint64()), nil
+	return result[0].Uint64(), nil
 }
 
 func fetchValidatorBalance(account *account.Account) (Balance, error) {
+	contractAddrFelt := sepoliaStrkTokenAddress.ToFelt()
+
 	result, err := account.Call(
 		context.Background(),
 		rpc.FunctionCall{
-			ContractAddress:    sepoliaStrkTokenAddress,
+			ContractAddress:    &contractAddrFelt,
 			EntryPointSelector: utils.GetSelectorFromNameFelt("balanceOf"),
 			Calldata:           []*felt.Felt{account.AccountAddress},
 		},

@@ -6,6 +6,7 @@ import (
 	"github.com/NethermindEth/juno/core/crypto"
 	"github.com/NethermindEth/juno/core/felt"
 	rpcv8 "github.com/NethermindEth/juno/rpc/v8"
+	"github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet.go/account"
 )
 
@@ -48,15 +49,21 @@ func main() {
 		// TODO: implement a retry mechanism ?
 	}
 
-	// Subscribe to the block headers
-	blockHeaderChan := make(chan rpcv8.BlockHeader) // could maybe make it buffered to allow for margin?
-	go subscribeToBlockHeaders(config.providerUrl, blockHeaderChan)
+	// Attestations waiting for their window (only 1 / block at most as MIN_ATTESTATION_WINDOW is constant)
+	pendingAttestations := make(map[BlockNumber]AttestRequiredWithValidity)
 
-	for blockHeader := range blockHeaderChan {
+	// Attestations in their sending window
+	activeAttestations := make(map[BlockNumber][]AttestRequired)
+
+	// Subscribe to the block headers
+	blockHeaderFeed := make(chan rpcv8.BlockHeader) // could maybe make it buffered to allow for margin?
+	go subscribeToBlockHeaders(config.providerUrl, blockHeaderFeed)
+
+	for blockHeader := range blockHeaderFeed {
 		fmt.Println("Block header:", blockHeader)
 
-		// Refetch epoch info on new epoch (validity guaranteed for 1 epoch even if updates are made)
-		if *blockHeader.Number == attestationInfo.CurrentEpochStartingBlock+attestationInfo.EpochLen {
+		// Re-fetch epoch info on new epoch (validity guaranteed for 1 epoch even if updates are made)
+		if *blockHeader.Number == attestationInfo.CurrentEpochStartingBlock.ToUint64()+attestationInfo.EpochLen {
 			previousEpochInfo := attestationInfo
 
 			attestationInfo, attestationWindow, blockNumberToAttestTo, err = fetchEpochInfo(account)
@@ -66,41 +73,34 @@ func main() {
 
 			// Sanity check
 			if attestationInfo.EpochId != previousEpochInfo.EpochId+1 ||
-				attestationInfo.CurrentEpochStartingBlock != previousEpochInfo.CurrentEpochStartingBlock+previousEpochInfo.EpochLen {
+				attestationInfo.CurrentEpochStartingBlock.ToUint64() != previousEpochInfo.CurrentEpochStartingBlock.ToUint64()+previousEpochInfo.EpochLen {
 				fmt.Println("Wrong epoch change: from %s to %s", previousEpochInfo, attestationInfo)
 				// TODO: what should we do ?
 			}
 		}
 
-		// Send an attestation if necessary
-		if *blockHeader.Number == blockNumberToAttestTo {
-			// TODO: should actually send the `AttestRequired` event from: now + MIN_ATTESTATION_WINDOW !
-			// and dispatcher can retry until: now + attestationWindow
-			// --> might need to revise project architecture ?
-			// --> maybe use a Map<now + MIN_ATTESTATION_WINDOW, blockHash> to check at each new block if need to send an event
-			dispatcher.AttestRequired <- AttestRequired{
-				blockHash: blockHeader.Hash,
-				window:    attestationWindow,
-			}
-		}
+		schedulePendingAttestations(&blockHeader, blockNumberToAttestTo, pendingAttestations, &attestationInfo, attestationWindow)
+
+		movePendingAttestationsToActive(pendingAttestations, activeAttestations, BlockNumber(*blockHeader.Number))
+
+		sendAllActiveAttestations(activeAttestations, &dispatcher, BlockNumber(*blockHeader.Number))
 	}
 
 	// --> I think we don't need to listen to stake events, we can get it when fetching AttestationInfo
 	//
-	// I've also need to check if the staked amount of the validator changes
+	// I also need to check if the staked amount of the validator changes
 	// The solution here is to subscribe to a possible event emitting
-	// If it happens, send a StakeUpdated event with the necesary information
+	// If it happens, send a StakeUpdated event with the necessary information
 
-	// I've also would like to check the balance of the address from time to time to verify
-	// that they have enough money for the next 10 attestation (value modifiable by user)
-	// Once it goes below it, the console
-	// should start giving warnings
+	// I'd also like to check the balance of the address from time to time to verify
+	// that they have enough money for the next 10 attestations (value modifiable by user)
+	// Once it goes below it, the console should start giving warnings
 	// This the least prio but we should implement nonetheless
 
 	// Should also track re-org and check if the re-org means we have to attest again or not
 }
 
-func fetchEpochInfo(account *account.Account) (AttestationInfo, uint8, uint64, error) {
+func fetchEpochInfo(account *account.Account) (AttestationInfo, uint64, BlockNumber, error) {
 	attestationInfo, attestInfoErr := fetchAttestationInfo(account)
 	if attestInfoErr != nil {
 		return AttestationInfo{}, 0, 0, attestInfoErr
@@ -116,8 +116,8 @@ func fetchEpochInfo(account *account.Account) (AttestationInfo, uint8, uint64, e
 	return attestationInfo, attestationWindow, blockNumberToAttestTo, nil
 }
 
-func computeBlockNumberToAttestTo(account *account.Account, attestationInfo AttestationInfo, attestationWindow uint8) uint64 {
-	startingBlock := attestationInfo.CurrentEpochStartingBlock + attestationInfo.EpochLen
+func computeBlockNumberToAttestTo(account *account.Account, attestationInfo AttestationInfo, attestationWindow uint64) BlockNumber {
+	startingBlock := attestationInfo.CurrentEpochStartingBlock.ToUint64() + attestationInfo.EpochLen
 
 	// TODO: might be hash(stake, hash(epoch_id, address))
 	// or should we use PoseidonArray instead ?
@@ -128,8 +128,73 @@ func computeBlockNumberToAttestTo(account *account.Account, attestationInfo Atte
 		),
 		account.AccountAddress,
 	)
-	// TODO: hash (felt) might not fit into a uint64 --> use big.Int in that case ?
-	blockOffset := hash.Uint64() % (attestationInfo.EpochLen - uint64(attestationWindow))
+	// TODO: hash (felt) will most likely not fit into a uint64 --> use big.Int in that case ?
+	blockOffset := hash.Uint64() % (attestationInfo.EpochLen - attestationWindow)
 
-	return startingBlock + blockOffset
+	return BlockNumber(startingBlock + blockOffset)
+}
+
+func schedulePendingAttestations(
+	currentBlockHeader *rpcv8.BlockHeader,
+	blockNumberToAttestTo BlockNumber,
+	pendingAttestations map[BlockNumber]AttestRequiredWithValidity,
+	attestationInfo *AttestationInfo,
+	attestationWindow uint64,
+) {
+	// If we are at the block number to attest to
+	if BlockNumber(*currentBlockHeader.Number) == blockNumberToAttestTo {
+		// Schedule the attestation to be sent starting at the beginning of attestation window
+		pendingAttestations[BlockNumber(*currentBlockHeader.Number+MIN_ATTESTATION_WINDOW)] = AttestRequiredWithValidity{
+			AttestRequired: AttestRequired{
+				blockHash: utils.HeapPtr(BlockHash(*currentBlockHeader.Hash)),
+			},
+			untilBlockNumber: BlockNumber(*currentBlockHeader.Number + attestationWindow),
+		}
+	}
+}
+
+func movePendingAttestationsToActive(
+	pendingAttestations map[BlockNumber]AttestRequiredWithValidity,
+	activeAttestations map[BlockNumber][]AttestRequired,
+	currentBlockNumber BlockNumber,
+) {
+	// If we are at the beginning of some attestation window
+	if pending, pendingExists := pendingAttestations[currentBlockNumber]; pendingExists {
+		// Initialize map for attestations active until end of the window
+		if _, activeExists := activeAttestations[pending.untilBlockNumber]; !activeExists {
+			activeAttestations[pending.untilBlockNumber] = make([]AttestRequired, 1)
+		}
+
+		// Move pending attestation to active
+		activeAttestations[pending.untilBlockNumber] = append(activeAttestations[pending.untilBlockNumber], pending.AttestRequired)
+
+		// Remove from pending
+		delete(pendingAttestations, currentBlockNumber)
+	}
+}
+
+func sendAllActiveAttestations(
+	activeAttestations map[BlockNumber][]AttestRequired,
+	dispatcher *EventDispatcher,
+	currentBlockNumber BlockNumber,
+) {
+	for untilBlockNumber, attestations := range activeAttestations {
+		if currentBlockNumber <= untilBlockNumber {
+			// Send attestations to dispatcher
+			for _, attestation := range attestations {
+				dispatcher.AttestRequired <- attestation
+			}
+		} else {
+			// Notify dispatcher of attestations to remove
+			dispatcher.AttestationsToRemove <- utils.Map(
+				attestations,
+				func(attestation AttestRequired) BlockHash {
+					return *attestation.blockHash
+				},
+			)
+
+			// Remove attestations from active
+			delete(activeAttestations, untilBlockNumber)
+		}
+	}
 }
