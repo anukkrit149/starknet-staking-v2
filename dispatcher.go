@@ -7,6 +7,7 @@ import (
 	"github.com/NethermindEth/juno/core/felt"
 	"github.com/NethermindEth/starknet.go/account"
 	"github.com/NethermindEth/starknet.go/rpc"
+	"github.com/NethermindEth/starknet.go/utils"
 )
 
 const defaultAttestDelay = 10
@@ -25,11 +26,15 @@ func (s *stakedAmount) Update(newStake *StakeUpdated) {
 }
 
 func (s *stakedAmount) Get(epoch uint64) {
+	// fn get_attestation_info_by_operational_address(
 
 }
 
 // requires filling with the right values
-type AttestRequired struct{}
+type AttestRequired struct {
+	blockHash *felt.Felt
+	window    uint8
+}
 
 // requires filling with the right values
 type StakeUpdated struct{}
@@ -55,25 +60,27 @@ func (d *EventDispatcher) Dispatch(
 	var currentEpoch uint64
 	stakedAmountPerEpoch := NewStakedAmount()
 
-	select {
-	case event, ok := <-d.AttestRequired:
-		if !ok {
-			break
-		}
-		stakedAmountPerEpoch.Get(currentEpoch)
-		resp, err := invokeAttest(account, &event)
-		if err != nil {
-			// throw a detailed error of what happened
-			// and
-			go repeatAttest(d.AttestRequired, event, defaultAttestDelay)
-		}
-		go trackAttest(provider, d.AttestRequired, event, resp)
+	for {
+		select {
+		case event, ok := <-d.AttestRequired:
+			if !ok {
+				break
+			}
+			stakedAmountPerEpoch.Get(currentEpoch)
+			resp, err := invokeAttest(account, &event)
+			if err != nil {
+				// throw a detailed error of what happened
+				// and
+				go repeatAttest(d.AttestRequired, event, defaultAttestDelay)
+			}
+			go trackAttest(provider, d.AttestRequired, event, resp)
 
-	case event, ok := <-d.StakeUpdated:
-		if !ok {
-			break
+		case event, ok := <-d.StakeUpdated:
+			if !ok {
+				break
+			}
+			stakedAmountPerEpoch.Update(&event)
 		}
-		stakedAmountPerEpoch.Update(&event)
 	}
 }
 
@@ -87,9 +94,9 @@ func invokeAttest(
 	}
 
 	fnCall := rpc.FunctionCall{
-		// ContractAddress: , // Some predetermined address
-		// EntryPointSelector: , // Some predetermined selector
-		// Calldata: , // Some calldata which is not predetermined
+		ContractAddress:    attestationContractAddress,
+		EntryPointSelector: utils.GetSelectorFromNameFelt("attest"),
+		Calldata:           []*felt.Felt{attest.blockHash},
 	}
 
 	invokeCalldata, err := account.FmtCalldata([]rpc.FunctionCall{fnCall})
@@ -115,16 +122,16 @@ func invokeAttest(
 		},
 	}
 
-	err = account.SignInvokeTransaction(context.Background(), &invoke.InvokeTxnV3)
-	if err != nil {
+	if err = account.SignInvokeTransaction(context.Background(), &invoke.InvokeTxnV3); err != nil {
 		return nil, err
 	}
 
+	// why not use dedicated fct `account.Provider().AddInvokeTransaction(context.Background(), invoke)` ?
 	return account.SendTransaction(context.Background(), invoke)
 }
 
 // Repeat an Attest event after the `delay` in seconds
-func repeatAttest(attestChan chan AttestRequired, event AttestRequired, delay uint64) {
+func repeatAttest(attestChan chan<- AttestRequired, event AttestRequired, delay uint64) {
 	time.Sleep(time.Second * time.Duration(delay))
 	attestChan <- event
 }
