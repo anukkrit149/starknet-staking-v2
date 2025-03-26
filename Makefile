@@ -1,0 +1,3 @@
+generate: ## Generate mocks
+	mkdir -p mocks
+	go generate ./...

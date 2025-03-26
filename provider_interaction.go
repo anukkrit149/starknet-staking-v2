@@ -21,7 +21,10 @@ func NewProvider(providerUrl string) *rpc.Provider {
 	return provider
 }
 
-func NewAccount(provider *rpc.Provider, accountData *AccountData) *account.Account {
+// We create a type (implementing an interface) to be able to mock the account for testing purposes
+type ValidatorAccount account.Account
+
+func NewValidatorAccount(provider *rpc.Provider, accountData *AccountData) ValidatorAccount {
 	// accountData should contain the information required:
 	//  * staker operational address
 	//  * public key
@@ -41,7 +44,24 @@ func NewAccount(provider *rpc.Provider, accountData *AccountData) *account.Accou
 	if err != nil {
 		log.Fatalf("Cannot create new account: %s", err)
 	}
-	return account
+
+	return ValidatorAccount(*account)
+}
+
+func (v *ValidatorAccount) GetTransactionStatus(ctx context.Context, transactionHash *felt.Felt) (*rpc.TxnStatusResp, error) {
+	return ((*account.Account)(v)).GetTransactionStatus(ctx, transactionHash)
+}
+
+func (v *ValidatorAccount) BuildAndSendInvokeTxn(ctx context.Context, functionCalls []rpc.InvokeFunctionCall, multiplier float64) (*rpc.AddInvokeTransactionResponse, error) {
+	return ((*account.Account)(v)).BuildAndSendInvokeTxn(ctx, functionCalls, multiplier)
+}
+
+func (v *ValidatorAccount) Call(ctx context.Context, call rpc.FunctionCall, blockId rpc.BlockID) ([]*felt.Felt, error) {
+	return ((*account.Account)(v)).Call(ctx, call, blockId)
+}
+
+func (v *ValidatorAccount) Address() felt.Felt {
+	return *v.AccountAddress
 }
 
 // TODO: might not need those 2 endpoints if we get info directly from staking contract
@@ -65,7 +85,7 @@ func subscribeToBlockHeader(providerUrl string, blockHeaderFeed chan<- *rpc.Bloc
 	// Initialize connection to WS provider
 	wsClient, err := rpc.NewWebsocketProvider(wsProviderUrl)
 	if err != nil {
-		panic(fmt.Sprintf("Error dialing the WS provider: %s", err))
+		log.Fatalf("Error dialing the WS provider: %s", err)
 	}
 	defer wsClient.Close()       // Close the WS client when the program finishes
 	defer close(blockHeaderFeed) // Close the headers channel
@@ -74,19 +94,20 @@ func subscribeToBlockHeader(providerUrl string, blockHeaderFeed chan<- *rpc.Bloc
 
 	sub, err := wsClient.SubscribeNewHeads(context.Background(), blockHeaderFeed, nil)
 	if err != nil {
-		panic(fmt.Sprintf("Error subscribing to new block headers: %s", err))
+		log.Fatalf("Error subscribing to new block headers: %s", err)
 	}
 
 	fmt.Println("Successfully subscribed to the node. Subscription ID:", sub.ID())
 }
 
-func fetchAttestationInfo(account *account.Account) (AttestationInfo, error) {
-	contractAddrFelt := attestationContractAddress.ToFelt()
+func fetchAttestationInfo(account Accounter) (AttestationInfo, error) {
+	contractAddrFelt := AttestationContractAddress.ToFelt()
+	accountAddress := account.Address()
 
 	functionCall := rpc.FunctionCall{
 		ContractAddress:    &contractAddrFelt,
 		EntryPointSelector: utils.GetSelectorFromNameFelt("get_attestation_info_by_operational_address"),
-		Calldata:           []*felt.Felt{account.AccountAddress},
+		Calldata:           []*felt.Felt{&accountAddress},
 	}
 
 	result, err := account.Call(context.Background(), functionCall, rpc.BlockID{Tag: "latest"})
@@ -109,8 +130,8 @@ func fetchAttestationInfo(account *account.Account) (AttestationInfo, error) {
 	}, nil
 }
 
-func fetchAttestationWindow(account *account.Account) (uint64, error) {
-	contractAddrFelt := attestationContractAddress.ToFelt()
+func fetchAttestationWindow(account Accounter) (uint64, error) {
+	contractAddrFelt := AttestationContractAddress.ToFelt()
 
 	result, err := account.Call(
 		context.Background(),
@@ -158,10 +179,10 @@ func fetchValidatorBalance(account *account.Account) (Balance, error) {
 }
 
 func invokeAttest(
-	account *account.Account, attest *AttestRequired,
+	account Accounter, attest *AttestRequired,
 ) (*rpc.AddInvokeTransactionResponse, error) {
-	contractAddrFelt := attestationContractAddress.ToFelt()
-	blockHashFelt := attest.blockHash.ToFelt()
+	contractAddrFelt := AttestationContractAddress.ToFelt()
+	blockHashFelt := attest.BlockHash.ToFelt()
 
 	calls := []rpc.InvokeFunctionCall{{
 		ContractAddress: &contractAddrFelt,
