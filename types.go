@@ -28,7 +28,7 @@ type Balance felt.Felt
 
 type BlockNumber uint64
 
-func (b BlockNumber) ToUint64() uint64 {
+func (b BlockNumber) Uint64() uint64 {
 	return uint64(b)
 }
 
@@ -49,7 +49,7 @@ type AttestationInfo struct {
 
 type AttestRequiredWithValidity struct {
 	AttestRequired
-	untilBlockNumber BlockNumber
+	UntilBlockNumber BlockNumber
 }
 
 type AttestRequired struct {
