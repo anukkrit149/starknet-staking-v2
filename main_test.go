@@ -49,7 +49,7 @@ func TestSchedulePendingAttestations(t *testing.T) {
 			AttestRequired: main.AttestRequired{
 				BlockHash: main.BlockHash(*currentBlockHeader.BlockHash),
 			},
-			UntilBlockNumber: main.BlockNumber(currentBlockHeader.BlockNumber + attestationWindow),
+			Until: main.BlockNumber(currentBlockHeader.BlockNumber + attestationWindow),
 		}, attestation)
 	})
 }
@@ -62,7 +62,7 @@ func TestMovePendingAttestationsToActive(t *testing.T) {
 			AttestRequired: main.AttestRequired{
 				BlockHash: main.BlockHash(*utils.HexToFelt(t, "0x123")),
 			},
-			UntilBlockNumber: main.BlockNumber(1 + 20),
+			Until: main.BlockNumber(1 + 20),
 		}
 		pendingAttestations[main.BlockNumber(1+main.MIN_ATTESTATION_WINDOW)] = scheduledAttest
 
@@ -90,7 +90,7 @@ func TestMovePendingAttestationsToActive(t *testing.T) {
 			AttestRequired: main.AttestRequired{
 				BlockHash: main.BlockHash(*utils.HexToFelt(t, "0x123")),
 			},
-			UntilBlockNumber: main.BlockNumber(1 + 20),
+			Until: main.BlockNumber(1 + 20),
 		}
 		pendingAttestations[main.BlockNumber(1+main.MIN_ATTESTATION_WINDOW)] = scheduledAttest
 
@@ -150,7 +150,7 @@ func TestSendAllActiveAttestations(t *testing.T) {
 		// Attest window is now passed (max window bound is current block number)
 		activeAttestations[main.BlockNumber(14)] = attestationsToRemove
 
-		dispatcher := main.NewEventDispatcher[*mocks.MockAccounter]()
+		dispatcher := main.NewEventDispatcher[*mocks.MockAccount]()
 
 		currentBlockNumber := main.BlockNumber(14)
 

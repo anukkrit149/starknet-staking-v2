@@ -24,10 +24,10 @@ func TestDispatch(t *testing.T) {
 
 	t.Run("Simple successful scenario: only 1 attest to make", func(t *testing.T) {
 		// Setup
-		dispatcher := main.NewEventDispatcher[*mocks.MockAccounter]()
+		dispatcher := main.NewEventDispatcher[*mocks.MockAccount]()
 		blockHashFelt := new(felt.Felt).SetUint64(1)
 
-		contractAddrFelt := main.AttestationContractAddress.ToFelt()
+		contractAddrFelt := main.AttestContract.ToFelt()
 		calls := []rpc.InvokeFunctionCall{{
 			ContractAddress: &contractAddrFelt,
 			FunctionName:    "attest",
@@ -45,7 +45,7 @@ func TestDispatch(t *testing.T) {
 			}, nil)
 
 		// Start routine
-		activeAttestations := make(map[main.BlockHash]main.AttestationStatus)
+		activeAttestations := make(map[main.BlockHash]main.AttestStatus)
 		wg := &conc.WaitGroup{}
 		wg.Go(func() { dispatcher.Dispatch(mockAccount, activeAttestations, wg) })
 
@@ -70,10 +70,10 @@ func TestDispatch(t *testing.T) {
 		// - an AttestRequired event is ignored if an attest is already successful
 
 		// Setup
-		dispatcher := main.NewEventDispatcher[*mocks.MockAccounter]()
+		dispatcher := main.NewEventDispatcher[*mocks.MockAccount]()
 		blockHashFelt := new(felt.Felt).SetUint64(1)
 
-		contractAddrFelt := main.AttestationContractAddress.ToFelt()
+		contractAddrFelt := main.AttestContract.ToFelt()
 		calls := []rpc.InvokeFunctionCall{{
 			ContractAddress: &contractAddrFelt,
 			FunctionName:    "attest",
@@ -100,7 +100,7 @@ func TestDispatch(t *testing.T) {
 			Times(1)
 
 		// Start routine
-		activeAttestations := make(map[main.BlockHash]main.AttestationStatus)
+		activeAttestations := make(map[main.BlockHash]main.AttestStatus)
 		wg := &conc.WaitGroup{}
 		wg.Go(func() { dispatcher.Dispatch(mockAccount, activeAttestations, wg) })
 
@@ -149,10 +149,10 @@ func TestDispatch(t *testing.T) {
 		// - an AttestRequired event is considered if previous attestation has failed
 
 		// Setup
-		dispatcher := main.NewEventDispatcher[*mocks.MockAccounter]()
+		dispatcher := main.NewEventDispatcher[*mocks.MockAccount]()
 		blockHashFelt := new(felt.Felt).SetUint64(1)
 
-		contractAddrFelt := main.AttestationContractAddress.ToFelt()
+		contractAddrFelt := main.AttestContract.ToFelt()
 		calls := []rpc.InvokeFunctionCall{{
 			ContractAddress: &contractAddrFelt,
 			FunctionName:    "attest",
@@ -181,7 +181,7 @@ func TestDispatch(t *testing.T) {
 			Times(1)
 
 		// Start routine
-		activeAttestations := make(map[main.BlockHash]main.AttestationStatus)
+		activeAttestations := make(map[main.BlockHash]main.AttestStatus)
 		wg := &conc.WaitGroup{}
 		wg.Go(func() { dispatcher.Dispatch(mockAccount, activeAttestations, wg) })
 
@@ -249,11 +249,11 @@ func TestDispatch(t *testing.T) {
 		// - an AttestationsToRemove event containing A is sent
 
 		// Setup
-		dispatcher := main.NewEventDispatcher[*mocks.MockAccounter]()
+		dispatcher := main.NewEventDispatcher[*mocks.MockAccount]()
 
 		// For event A
 		blockHashFeltA := new(felt.Felt).SetUint64(1)
-		contractAddrFelt := main.AttestationContractAddress.ToFelt()
+		contractAddrFelt := main.AttestContract.ToFelt()
 		callsA := []rpc.InvokeFunctionCall{{
 			ContractAddress: &contractAddrFelt,
 			FunctionName:    "attest",
@@ -303,7 +303,7 @@ func TestDispatch(t *testing.T) {
 			Times(1)
 
 		// Start routine
-		activeAttestations := make(map[main.BlockHash]main.AttestationStatus)
+		activeAttestations := make(map[main.BlockHash]main.AttestStatus)
 		wg := &conc.WaitGroup{}
 		wg.Go(func() { dispatcher.Dispatch(mockAccount, activeAttestations, wg) })
 
@@ -355,10 +355,10 @@ func TestDispatch(t *testing.T) {
 		// - the AttestRequired event A finally finishes (successful/failed, whatever) and should not set the status in map (as it got deleted)
 
 		// Setup
-		dispatcher := main.NewEventDispatcher[*mocks.MockAccounter]()
+		dispatcher := main.NewEventDispatcher[*mocks.MockAccount]()
 
 		blockHashFelt := new(felt.Felt).SetUint64(1)
-		contractAddrFelt := main.AttestationContractAddress.ToFelt()
+		contractAddrFelt := main.AttestContract.ToFelt()
 		calls := []rpc.InvokeFunctionCall{{
 			ContractAddress: &contractAddrFelt,
 			FunctionName:    "attest",
@@ -388,7 +388,7 @@ func TestDispatch(t *testing.T) {
 			Times(1)
 
 		// Start routine
-		activeAttestations := make(map[main.BlockHash]main.AttestationStatus)
+		activeAttestations := make(map[main.BlockHash]main.AttestStatus)
 		wg := &conc.WaitGroup{}
 		wg.Go(func() { dispatcher.Dispatch(mockAccount, activeAttestations, wg) })
 
@@ -441,7 +441,7 @@ func TestTrackAttest(t *testing.T) {
 		blockHash := main.BlockHash(*txHash)
 		event := main.AttestRequired{BlockHash: blockHash}
 		txRes := &rpc.AddInvokeTransactionResponse{TransactionHash: txHash}
-		activeAttestations := make(map[main.BlockHash]main.AttestationStatus)
+		activeAttestations := make(map[main.BlockHash]main.AttestStatus)
 		activeAttestations[blockHash] = main.Ongoing
 
 		main.TrackAttest(mockAccount, event, txRes, activeAttestations)
@@ -463,7 +463,7 @@ func TestTrackAttest(t *testing.T) {
 		blockHash := main.BlockHash(*txHash)
 		event := main.AttestRequired{BlockHash: blockHash}
 		txRes := &rpc.AddInvokeTransactionResponse{TransactionHash: txHash}
-		activeAttestations := make(map[main.BlockHash]main.AttestationStatus)
+		activeAttestations := make(map[main.BlockHash]main.AttestStatus)
 		activeAttestations[blockHash] = main.Ongoing
 
 		main.TrackAttest(mockAccount, event, txRes, activeAttestations)
@@ -486,7 +486,7 @@ func TestTrackAttest(t *testing.T) {
 		blockHash := main.BlockHash(*txHash)
 		event := main.AttestRequired{BlockHash: blockHash}
 		txRes := &rpc.AddInvokeTransactionResponse{TransactionHash: txHash}
-		activeAttestations := make(map[main.BlockHash]main.AttestationStatus)
+		activeAttestations := make(map[main.BlockHash]main.AttestStatus)
 		activeAttestations[blockHash] = main.Ongoing
 
 		main.TrackAttest(mockAccount, event, txRes, activeAttestations)
@@ -509,7 +509,7 @@ func TestTrackAttest(t *testing.T) {
 		blockHash := main.BlockHash(*txHash)
 		event := main.AttestRequired{BlockHash: blockHash}
 		txRes := &rpc.AddInvokeTransactionResponse{TransactionHash: txHash}
-		activeAttestations := make(map[main.BlockHash]main.AttestationStatus)
+		activeAttestations := make(map[main.BlockHash]main.AttestStatus)
 		activeAttestations[blockHash] = main.Ongoing
 
 		main.TrackAttest(mockAccount, event, txRes, activeAttestations)

@@ -15,10 +15,10 @@ const defaultAttestDelay = 10
 // Created a function variable for mocking purposes in tests
 var SleepFn = time.Sleep
 
-type AttestationStatus uint8
+type AttestStatus uint8
 
 const (
-	Ongoing AttestationStatus = iota + 1
+	Ongoing AttestStatus = iota + 1
 	Successful
 	Failed
 )
@@ -37,7 +37,7 @@ func NewEventDispatcher[Account Accounter]() EventDispatcher[Account] {
 
 func (d *EventDispatcher[Account]) Dispatch(
 	account Account,
-	activeAttestations map[BlockHash]AttestationStatus,
+	activeAttestations map[BlockHash]AttestStatus,
 	wg *conc.WaitGroup,
 ) {
 	for {
@@ -87,7 +87,7 @@ func TrackAttest[Account Accounter](
 	account Account,
 	event AttestRequired,
 	txResp *rpc.AddInvokeTransactionResponse,
-	activeAttestations map[BlockHash]AttestationStatus,
+	activeAttestations map[BlockHash]AttestStatus,
 ) {
 	txStatus, err := TrackTransactionStatus(account, txResp.TransactionHash)
 
@@ -118,7 +118,7 @@ func TrackAttest[Account Accounter](
 	// log attestation was successful
 }
 
-func setStatusIfExists(activeAttestations map[BlockHash]AttestationStatus, blockHash *BlockHash, status AttestationStatus) {
+func setStatusIfExists(activeAttestations map[BlockHash]AttestStatus, blockHash *BlockHash, status AttestStatus) {
 	if _, exists := activeAttestations[*blockHash]; exists {
 		activeAttestations[*blockHash] = status
 	}
