@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-
-	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/sourcegraph/conc"
 )
 
@@ -19,42 +17,43 @@ func Attest(config *Config) {
 	dispatcher := NewEventDispatcher[*ValidatorAccount]()
 
 	wg := conc.NewWaitGroup()
-	wg.Go(func() {
-		dispatcher.Dispatch(&validatorAccount, make(map[BlockHash]AttestStatus), wg)
-	})
 	defer wg.Wait()
+	wg.Go(func() {
+		dispatcher.Dispatch(&validatorAccount, make(map[BlockHash]AttestStatus))
+	})
 
 	// Subscribe to the block headers
-	blockHeaderFeed := make(chan *rpc.BlockHeader)
-	go subscribeToBlockHeader(config.providerUrl, blockHeaderFeed)
+	wsProvider, headersFeed := BlockHeaderSubscription(config.providerUrl)
+	defer wsProvider.Close()
+	defer close(headersFeed)
 
-	attestationInfo, attestationWindow, blockNumberToAttestTo, err := fetchEpochInfo(&validatorAccount)
+	attestInfo, attestationWindow, blockNumberToAttestTo, err := fetchEpochInfo(&validatorAccount)
 	if err != nil {
-		// If we fail at this point it means there is probably something wrong with the configuration
-		// we might log the error and do a re-try just to make sure
+		// If we fail at this point it means there is probably something wrong with the
+		// configuration we might log the error and do a re-try just to make sure
 	}
 
 	pendingAttests := make(map[BlockNumber]AttestRequiredWithValidity)
 
 	activeAttests := make(map[BlockNumber][]AttestRequired)
 
-	for blockHeader := range blockHeaderFeed {
+	for blockHeader := range headersFeed {
 		fmt.Println("Block header:", blockHeader)
 
 		// Re-fetch epoch info on new epoch (validity guaranteed for 1 epoch even if updates are made)
-		if blockHeader.BlockNumber == attestationInfo.CurrentEpochStartingBlock.Uint64()+attestationInfo.EpochLen {
-			previousEpochInfo := attestationInfo
+		if blockHeader.BlockNumber == attestInfo.CurrentEpochStartingBlock.Uint64()+attestInfo.EpochLen {
+			previousEpochInfo := attestInfo
 
-			attestationInfo, attestationWindow, blockNumberToAttestTo, err = fetchEpochInfo(&validatorAccount)
+			attestInfo, attestationWindow, blockNumberToAttestTo, err = fetchEpochInfo(&validatorAccount)
 			if err != nil {
 				// TODO: implement a retry mechanism ?
 			}
 
 			// Sanity check
-			if attestationInfo.EpochId != previousEpochInfo.EpochId+1 ||
-				attestationInfo.CurrentEpochStartingBlock.Uint64() != previousEpochInfo.CurrentEpochStartingBlock.Uint64()+previousEpochInfo.EpochLen {
+			if attestInfo.EpochId != previousEpochInfo.EpochId+1 ||
+				attestInfo.CurrentEpochStartingBlock.Uint64() != previousEpochInfo.CurrentEpochStartingBlock.Uint64()+previousEpochInfo.EpochLen {
 				// TODO: give more details concerning the epoch info
-				fmt.Printf("Wrong epoch change: from %d to %d", previousEpochInfo.EpochId, attestationInfo.EpochId)
+				fmt.Printf("Wrong epoch change: from %d to %d", previousEpochInfo.EpochId, attestInfo.EpochId)
 				// TODO: what should we do ?
 			}
 		}

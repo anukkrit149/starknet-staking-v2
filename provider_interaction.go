@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/NethermindEth/starknet.go/rpc"
 )
 
+// Returns a new Starknet.Go RPC Provider
 func NewProvider(providerUrl string) *rpc.Provider {
 	provider, err := rpc.NewProvider(providerUrl)
 	if err != nil {
@@ -16,26 +16,24 @@ func NewProvider(providerUrl string) *rpc.Provider {
 	return provider
 }
 
-func subscribeToBlockHeader(providerUrl string, blockHeaderFeed chan<- *rpc.BlockHeader) {
-	fmt.Println("Starting websocket connection...")
-
+// Returns a Go channel where BlockHeaders are recieved
+func BlockHeaderSubscription(providerUrl string) (
+	*rpc.WsProvider, chan *rpc.BlockHeader,
+) {
 	// Take the providerUrl parts (host & port) and build the ws url
 	wsProviderUrl := "ws://" + "localhost" + ":" + "6061" + "/v0_8"
 
 	// Initialize connection to WS provider
-	wsClient, err := rpc.NewWebsocketProvider(wsProviderUrl)
+	wsProvider, err := rpc.NewWebsocketProvider(wsProviderUrl)
 	if err != nil {
 		log.Fatalf("Error dialing the WS provider: %s", err)
 	}
-	defer wsClient.Close()       // Close the WS client when the program finishes
-	defer close(blockHeaderFeed) // Close the headers channel
 
-	fmt.Println("Established connection with the client")
-
-	sub, err := wsClient.SubscribeNewHeads(context.Background(), blockHeaderFeed, nil)
+	headersFeed := make(chan *rpc.BlockHeader)
+	_, err = wsProvider.SubscribeNewHeads(context.Background(), headersFeed, nil)
 	if err != nil {
 		log.Fatalf("Error subscribing to new block headers: %s", err)
 	}
 
-	fmt.Println("Successfully subscribed to the node. Subscription ID:", sub.ID())
+	return wsProvider, headersFeed
 }

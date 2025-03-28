@@ -13,7 +13,7 @@ import (
 const defaultAttestDelay = 10
 
 // Created a function variable for mocking purposes in tests
-var SleepFn = time.Sleep
+var Sleep = time.Sleep
 
 type AttestStatus uint8
 
@@ -38,20 +38,21 @@ func NewEventDispatcher[Account Accounter]() EventDispatcher[Account] {
 func (d *EventDispatcher[Account]) Dispatch(
 	account Account,
 	activeAttestations map[BlockHash]AttestStatus,
-	wg *conc.WaitGroup,
 ) {
+	wg := conc.NewWaitGroup()
+	defer wg.Wait()
+
 	for {
 		select {
 		case event, ok := <-d.AttestRequired:
 			if !ok {
-				// Should never get closed
 				return
 			}
 
 			switch status, exists := activeAttestations[event.BlockHash]; {
-			case !exists, status == Failed:
+			case !exists || status == Failed:
 				activeAttestations[event.BlockHash] = Ongoing
-			case status == Ongoing, status == Successful:
+			case status == Ongoing || status == Successful:
 				continue
 			}
 			resp, err := invokeAttest(account, &event)
@@ -142,7 +143,7 @@ func TrackTransactionStatus[Account Accounter](account Account, txHash *felt.Fel
 		if txStatus.FinalityStatus != rpc.TxnStatus_Received {
 			return txStatus, nil
 		}
-		SleepFn(time.Second)
+		Sleep(time.Second)
 	}
 
 	// If we are here, it means the transaction didn't change it's status for a long time.
