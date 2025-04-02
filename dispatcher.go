@@ -24,20 +24,22 @@ const (
 )
 
 type EventDispatcher[Account Accounter] struct {
-	AttestRequired       chan AttestRequired
-	AttestationsToRemove chan []BlockHash
+	// Could potentially add an event like EndOfEpoch to log in this file if the attestation was successful.
+	// Could still log that when receiving next attest event without EndOfEpoch event,
+	// but will force us to wait at least 11 blocks.
+	AttestRequired chan AttestRequired
 }
 
 func NewEventDispatcher[Account Accounter]() EventDispatcher[Account] {
 	return EventDispatcher[Account]{
-		AttestRequired:       make(chan AttestRequired),
-		AttestationsToRemove: make(chan []BlockHash),
+		AttestRequired: make(chan AttestRequired),
 	}
 }
 
 func (d *EventDispatcher[Account]) Dispatch(
 	account Account,
-	activeAttestations map[BlockHash]AttestStatus,
+	currentAttest *AttestRequired,
+	currentAttestStatus *AttestStatus,
 ) {
 	wg := conc.NewWaitGroup()
 	defer wg.Wait()
@@ -49,30 +51,26 @@ func (d *EventDispatcher[Account]) Dispatch(
 				return
 			}
 
-			switch status, exists := activeAttestations[event.BlockHash]; {
-			case !exists || status == Failed:
-				activeAttestations[event.BlockHash] = Ongoing
-			case status == Ongoing || status == Successful:
-				continue
-			}
-			resp, err := invokeAttest(account, &event)
-			if err != nil {
-				// throw a detailed error of what happened
-				activeAttestations[event.BlockHash] = Failed
+			if event == *currentAttest && (*currentAttestStatus == Ongoing || *currentAttestStatus == Successful) {
 				continue
 			}
 
-			wg.Go(func() { TrackAttest(account, event, resp, activeAttestations) })
-		case event, ok := <-d.AttestationsToRemove:
-			if !ok {
-				// Should never get closed
-				return
-			}
-			// TODO: when deleting, could check the status and if it's not successful,
+			// TODO: when changing to a new attestation, could check the status and if it's not successful,
 			// then log the block was not successfuly attested!
-			for _, blockHash := range event {
-				delete(activeAttestations, blockHash)
+			*currentAttest = event
+			*currentAttestStatus = Ongoing
+
+			resp, err := InvokeAttest(account, &event)
+			if err != nil {
+				// throw a detailed error of what happened
+				*currentAttestStatus = Failed
+				continue
 			}
+
+			wg.Go(func() {
+				txStatus := TrackAttest(account, resp)
+				*currentAttestStatus = txStatus
+			})
 		}
 	}
 }
@@ -86,28 +84,23 @@ func (d *EventDispatcher[Account]) Dispatch(
 // If the transaction was actually reverted log it and repeat the attestation
 func TrackAttest[Account Accounter](
 	account Account,
-	event AttestRequired,
 	txResp *rpc.AddInvokeTransactionResponse,
-	activeAttestations map[BlockHash]AttestStatus,
-) {
+) AttestStatus {
 	txStatus, err := TrackTransactionStatus(account, txResp.TransactionHash)
 
 	if err != nil {
 		// log exactly what's the error
-		setStatusIfExists(activeAttestations, &event.BlockHash, Failed)
-		return
+		return Failed
 	}
 
 	if txStatus.FinalityStatus == rpc.TxnStatus_Rejected {
 		// log exactly the rejection and why was it
-		setStatusIfExists(activeAttestations, &event.BlockHash, Failed)
-		return
+		return Failed
 	}
 
 	if txStatus.ExecutionStatus == rpc.TxnExecutionStatusREVERTED {
 		// log the failure & the reason, in here `txStatus.FailureReason` probably
-		setStatusIfExists(activeAttestations, &event.BlockHash, Failed)
-		return
+		return Failed
 	}
 
 	// If we got here, then the transaction status was accepted & successful
@@ -115,14 +108,9 @@ func TrackAttest[Account Accounter](
 	// It might have been deleted from map if routine took some time and in the meantime
 	// the next block got processed (and window for attestation passed). In that case,
 	// we do not want to re-put it into the map
-	setStatusIfExists(activeAttestations, &event.BlockHash, Successful)
+	//
 	// log attestation was successful
-}
-
-func setStatusIfExists(activeAttestations map[BlockHash]AttestStatus, blockHash *BlockHash, status AttestStatus) {
-	if _, exists := activeAttestations[*blockHash]; exists {
-		activeAttestations[*blockHash] = status
-	}
+	return Successful
 }
 
 // I guess we could sleep & wait a bit here because I believe canceling & then retrying from the next block
