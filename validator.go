@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"math/big"
 
 	"github.com/NethermindEth/juno/core/felt"
@@ -18,6 +17,7 @@ type Accounter interface {
 	GetTransactionStatus(ctx context.Context, transactionHash *felt.Felt) (*rpc.TxnStatusResp, error)
 	BuildAndSendInvokeTxn(ctx context.Context, functionCalls []rpc.InvokeFunctionCall, multiplier float64) (*rpc.AddInvokeTransactionResponse, error)
 	Call(ctx context.Context, call rpc.FunctionCall, blockId rpc.BlockID) ([]*felt.Felt, error)
+	BlockWithTxHashes(ctx context.Context, blockID rpc.BlockID) (interface{}, error)
 
 	// Custom Methods
 	//
@@ -32,11 +32,11 @@ type Accounter interface {
 
 type ValidatorAccount account.Account
 
-func NewValidatorAccount(provider *rpc.Provider, accountData *AccountData) ValidatorAccount {
+func NewValidatorAccount[Log Logger](provider *rpc.Provider, logger Log, accountData *AccountData) ValidatorAccount {
 	publicKey := accountData.pubKey
 	privateKey, ok := new(big.Int).SetString(accountData.privKey, 0)
 	if !ok {
-		log.Fatalf("Cannot turn private key %s into a big int", privateKey)
+		logger.Fatalf("Cannot turn private key %s into a big int", privateKey)
 	}
 	accountAddr := AddressFromString(accountData.address)
 
@@ -45,14 +45,15 @@ func NewValidatorAccount(provider *rpc.Provider, accountData *AccountData) Valid
 	accountAddrFelt := accountAddr.ToFelt()
 	account, err := account.NewAccount(provider, &accountAddrFelt, publicKey, ks, 2)
 	if err != nil {
-		log.Fatalf("Cannot create new account: %s", err)
+		logger.Fatalf("Cannot create validator account: %s", err)
 	}
 
+	logger.Infow("Successfully created validator account", "address", accountAddrFelt.String())
 	return ValidatorAccount(*account)
 }
 
 func (v *ValidatorAccount) GetTransactionStatus(ctx context.Context, transactionHash *felt.Felt) (*rpc.TxnStatusResp, error) {
-	return ((*account.Account)(v)).GetTransactionStatus(ctx, transactionHash)
+	return ((*account.Account)(v)).Provider.GetTransactionStatus(ctx, transactionHash)
 }
 
 func (v *ValidatorAccount) BuildAndSendInvokeTxn(ctx context.Context, functionCalls []rpc.InvokeFunctionCall, multiplier float64) (*rpc.AddInvokeTransactionResponse, error) {
@@ -60,7 +61,11 @@ func (v *ValidatorAccount) BuildAndSendInvokeTxn(ctx context.Context, functionCa
 }
 
 func (v *ValidatorAccount) Call(ctx context.Context, call rpc.FunctionCall, blockId rpc.BlockID) ([]*felt.Felt, error) {
-	return ((*account.Account)(v)).Call(ctx, call, blockId)
+	return ((*account.Account)(v)).Provider.Call(ctx, call, blockId)
+}
+
+func (v *ValidatorAccount) BlockWithTxHashes(ctx context.Context, blockID rpc.BlockID) (interface{}, error) {
+	return ((*account.Account)(v)).Provider.BlockWithTxHashes(ctx, blockID)
 }
 
 func (v *ValidatorAccount) Address() *felt.Felt {
@@ -149,11 +154,17 @@ func FetchValidatorBalance[Account Accounter](account Account) (Balance, error) 
 
 // I believe this functions returns many things, it should probably be grouped under
 // a unique type
-func FetchEpochAndAttestInfo[Account Accounter](account Account) (EpochInfo, AttestInfo, error) {
+func FetchEpochAndAttestInfo[Account Accounter, Log Logger](account Account, logger Log) (EpochInfo, AttestInfo, error) {
 	epochInfo, err := FetchEpochInfo(account)
 	if err != nil {
 		return EpochInfo{}, AttestInfo{}, err
 	}
+	logger.Infow(
+		"Successfully fetched epoch info",
+		"epoch ID", epochInfo.EpochId,
+		"epoch starting block", epochInfo.CurrentEpochStartingBlock,
+		"epoch ending block", epochInfo.CurrentEpochStartingBlock+BlockNumber(epochInfo.EpochLen),
+	)
 
 	attestWindow, windowErr := FetchAttestWindow(account)
 	if windowErr != nil {
@@ -168,6 +179,7 @@ func FetchEpochAndAttestInfo[Account Accounter](account Account) (EpochInfo, Att
 		WindowEnd:   blockNum + BlockNumber(attestWindow),
 	}
 
+	logger.Infow("Successfully computed target block to attest to", "epoch ID", epochInfo.EpochId, "attestation info", attestInfo)
 	return epochInfo, attestInfo, nil
 }
 
