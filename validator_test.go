@@ -3,6 +3,7 @@ package main_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 	"os"
 	"testing"
@@ -23,6 +24,13 @@ import (
 type envVariable struct {
 	httpProviderUrl string
 	wsProviderUrl   string
+}
+
+func NewAccountData(privKey string, address string) main.AccountData {
+	return main.AccountData{
+		PrivKey:            privKey,
+		OperationalAddress: address,
+	}
 }
 
 func loadEnv(t *testing.T) envVariable {
@@ -57,52 +65,25 @@ func TestNewValidatorAccount(t *testing.T) {
 		provider, providerErr := rpc.NewProvider(env.httpProviderUrl)
 		require.NoError(t, providerErr)
 
-		mockLogger.EXPECT().
-			Fatalf("Cannot turn private key %s into a big int", nil).
-			Do(func(_ string, _ ...interface{}) {
-				panic("Fatalf called") // Simulate os.Exit
-			})
+		validatorAccount, err := main.NewValidatorAccount(provider, mockLogger, &main.AccountData{})
 
-		defer func() {
-			if r := recover(); r == nil {
-				require.FailNow(t, "The code did not panic when it should have")
-			} else {
-				// Just making sure the exec panicked for the right reason
-				require.Equal(t, "Fatalf called", r)
-			}
-		}()
-
-		validatorAccount := main.NewValidatorAccount(provider, mockLogger, &main.AccountData{})
-
-		require.Equal(t, main.ValidatorAccount(account.Account{}), validatorAccount)
+		require.Equal(t, main.ValidatorAccount{}, validatorAccount)
+		expectedErrorMsg := fmt.Sprintf("Cannot turn private key %s into a big int", (*big.Int)(nil))
+		require.Equal(t, expectedErrorMsg, err.Error())
 	})
 
 	t.Run("Error: cannot create validator account", func(t *testing.T) {
 		provider, providerErr := rpc.NewProvider("http://localhost:1234")
 		require.NoError(t, providerErr)
 
-		mockLogger.EXPECT().
-			Fatalf("Cannot create validator account: %s", gomock.Any()).
-			Do(func(_ string, _ ...interface{}) {
-				panic("Fatalf called") // Simulate os.Exit
-			})
+		privateKey := "0x123"
+		address := "0x456"
+		accountData := NewAccountData(privateKey, address)
+		validatorAccount, err := main.NewValidatorAccount(provider, mockLogger, &accountData)
 
-		defer func() {
-			if r := recover(); r == nil {
-				require.FailNow(t, "The code did not panic when it should have")
-			} else {
-				// Just making sure the exec panicked for the right reason
-				require.Equal(t, "Fatalf called", r)
-			}
-		}()
-
-		address := "0x123"
-		privateKey := "0x456"
-		publicKey := "0x789"
-		accountData := main.NewAccountData(address, privateKey, publicKey)
-		validatorAccount := main.NewValidatorAccount(provider, mockLogger, &accountData)
-
-		require.Equal(t, main.ValidatorAccount(account.Account{}), validatorAccount)
+		require.Equal(t, main.ValidatorAccount{}, validatorAccount)
+		expectedErrorMsg := `Cannot create validator account: -32603 The error is not a valid RPC error: Post "http://localhost:1234": dial tcp 127.0.0.1:1234: connect: connection refused`
+		require.Equal(t, expectedErrorMsg, err.Error())
 	})
 
 	t.Run("Successful account creation", func(t *testing.T) {
@@ -111,26 +92,31 @@ func TestNewValidatorAccount(t *testing.T) {
 		provider, providerErr := rpc.NewProvider(env.httpProviderUrl)
 		require.NoError(t, providerErr)
 
-		address := "0x123"
-		privateKey := "0x456"
-		publicKey := "0x789"
-		accountData := main.NewAccountData(address, privateKey, publicKey)
+		privateKey := "0x123"
+		address := "0x456"
+		accountData := NewAccountData(privateKey, address)
+
+		mockLogger.EXPECT().Infow("Successfully created validator account", "address", address)
 
 		mockLogger.EXPECT().Infow("Successfully created validator account", "address", address)
 
 		// Test
-		validatorAccount := main.NewValidatorAccount(provider, mockLogger, &accountData)
+		validatorAccount, err := main.NewValidatorAccount(provider, mockLogger, &accountData)
 
 		// Assert
 		accountAddrFelt, stringToFeltErr := new(felt.Felt).SetString(address)
 		require.NoError(t, stringToFeltErr)
 
-		privateKeyBigInt := big.NewInt(1110) // 1110 is 0x456 as int
+		privateKeyBigInt := big.NewInt(291) // 291 is "0x123" as int
+		// This is the public key for private key "0x123"
+		publicKey := "2443263864760624031255983690848140455871762770061978316256189704907682682390"
 		ks := account.SetNewMemKeystore(publicKey, privateKeyBigInt)
 
 		expectedValidatorAccount, accountErr := account.NewAccount(provider, accountAddrFelt, publicKey, ks, 2)
 		require.NoError(t, accountErr)
 		require.Equal(t, main.ValidatorAccount(*expectedValidatorAccount), validatorAccount)
+
+		require.Nil(t, err)
 	})
 }
 
