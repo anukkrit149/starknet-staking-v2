@@ -41,7 +41,6 @@ The config file must be a `.json` with the following fields:
 }
 ```
 
-
 ### Example with Juno
 
 Once you have your own node set either built from source or through docker. [See how](https://github.com/NethermindEth/juno?tab=readme-ov-file#run-with-docker). 
@@ -68,7 +67,7 @@ The configuration file properties will look like:
 
 It's important we specify the `v0_8` part so that we are routed through the right rpc version and not the node's default one.
 
-## ⚠️ License
+##  License
 
 Starknet Staking v2 is open-source software licensed under the [Apache-2.0 License](https://github.com/NethermindEth/starknet-staking-v2/blob/main/LICENSE).
 
