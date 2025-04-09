@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -15,16 +16,18 @@ import (
 
 // TODO(rdr): make fields required so that if they are not set then the tool signals it and fails
 type AccountData struct {
-	PrivKey            string `json:"privateKey"`
-	OperationalAddress string `json:"operationalAddress"`
+	PrivKey            string  `json:"privateKey"`
+	OperationalAddress Address `json:"operationalAddress"`
 }
 
 type Config struct {
 	HttpProviderUrl string `json:"httpProviderUrl"`
 	// TODO: should we have this additional url or do we parse the http one and create a ws out of it ?
 	// I think having a 2nd one is more flexible
-	WsProviderUrl string `json:"wsProviderUrl"`
+	WsProviderUrl     string `json:"wsProviderUrl"`
+	ExternalSignerUrl string `json:"externalSignerUrl"`
 	AccountData
+	useLocalSigner bool // not exported, set in preRunE
 }
 
 // Function to load and parse the JSON file
@@ -43,18 +46,57 @@ func LoadConfig(filePath string) (Config, error) {
 	return config, nil
 }
 
+func VerifyLoadedConfig(config Config, useLocalSigner bool, useExternalSigner bool) error {
+	if config.HttpProviderUrl == "" {
+		return missingConfigGeneralField("httpProviderUrl")
+	}
+
+	if config.WsProviderUrl == "" {
+		return missingConfigGeneralField("wsProviderUrl")
+	}
+
+	if config.OperationalAddress == Address(felt.Zero) {
+		return missingConfigGeneralField("operationalAddress")
+	}
+
+	// Enforce mutually exclusive flags
+	if useLocalSigner == useExternalSigner {
+		return errors.New("you must specify exactly one of --local-signer or --external-signer")
+	}
+
+	if useLocalSigner && config.PrivKey == "" {
+		return missingConfigSignerField("privateKey", "--local-signer")
+	}
+
+	if useExternalSigner && config.ExternalSignerUrl == "" {
+		return missingConfigSignerField("externalSignerUrl", "--external-signer")
+	}
+
+	return nil
+}
+
 func NewCommand() cobra.Command {
 	var configPathF string
 	var logLevelF string
 
 	var config Config
 	var logger utils.ZapLogger
+
+	var useLocalSigner bool
+	var useExternalSigner bool
+
 	preRunE := func(cmd *cobra.Command, args []string) error {
 		loadedConfig, err := LoadConfig(configPathF)
 		if err != nil {
 			return err
 		}
+
+		if err := VerifyLoadedConfig(loadedConfig, useLocalSigner, useExternalSigner); err != nil {
+			return err
+		}
+
 		config = loadedConfig
+		config.useLocalSigner = useLocalSigner
 
 		var logLevel utils.LogLevel
 		if err := logLevel.Set(logLevelF); err != nil {
@@ -89,6 +131,10 @@ func NewCommand() cobra.Command {
 	rootCmd.Flags().StringVar(
 		&logLevelF, "log-level", utils.INFO.String(), "Options: trace, debug, info, warn, error.",
 	)
+
+	// Mutually exclusive signer flags
+	rootCmd.Flags().BoolVar(&useLocalSigner, "local-signer", false, "Use a local signer")
+	rootCmd.Flags().BoolVar(&useExternalSigner, "external-signer", false, "Use an external signer (HTTP)")
 
 	return rootCmd
 }

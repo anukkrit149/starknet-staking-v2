@@ -19,16 +19,26 @@ func Attest(config *Config, logger utils.ZapLogger) error {
 		return err
 	}
 
-	validatorAccount, err := NewValidatorAccount(provider, &logger, &config.AccountData)
-	if err != nil {
-		return err
+	var account Accounter
+	if config.useLocalSigner {
+		validatorAccount, err := NewValidatorAccount(provider, &logger, &config.AccountData)
+		if err != nil {
+			return err
+		}
+		account = &validatorAccount
+	} else {
+		externalSigner, err := NewExternalSigner(provider, config.AccountData.OperationalAddress, config.ExternalSignerUrl)
+		if err != nil {
+			return err
+		}
+		account = &externalSigner
 	}
 
-	dispatcher := NewEventDispatcher[*ValidatorAccount, *utils.ZapLogger]()
+	dispatcher := NewEventDispatcher[Accounter, *utils.ZapLogger]()
 
 	wg := conc.NewWaitGroup()
 	defer wg.Wait()
-	wg.Go(func() { dispatcher.Dispatch(&validatorAccount, &logger) })
+	wg.Go(func() { dispatcher.Dispatch(account, &logger) })
 
 	// Subscribe to the block headers
 	wsProvider, headersFeed, err := BlockHeaderSubscription(config.WsProviderUrl, &logger)
@@ -38,7 +48,7 @@ func Attest(config *Config, logger utils.ZapLogger) error {
 	defer wsProvider.Close()
 	defer close(headersFeed)
 
-	if err := ProcessBlockHeaders(headersFeed, &validatorAccount, &logger, &dispatcher); err != nil {
+	if err := ProcessBlockHeaders(headersFeed, account, &logger, &dispatcher); err != nil {
 		return err
 	}
 	// I'd also like to check the balance of the address from time to time to verify

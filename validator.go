@@ -7,6 +7,7 @@ import (
 	"github.com/NethermindEth/juno/core/felt"
 	"github.com/NethermindEth/starknet.go/account"
 	"github.com/NethermindEth/starknet.go/curve"
+	"github.com/NethermindEth/starknet.go/hash"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/NethermindEth/starknet.go/utils"
 	"github.com/cockroachdb/errors"
@@ -47,8 +48,7 @@ func NewValidatorAccount[Log Logger](provider *rpc.Provider, logger Log, account
 
 	ks := account.SetNewMemKeystore(publicKey.String(), privateKey)
 
-	accountAddr := AddressFromString(accountData.OperationalAddress)
-	accountAddrFelt := accountAddr.ToFelt()
+	accountAddrFelt := accountData.OperationalAddress.ToFelt()
 
 	account, err := account.NewAccount(provider, &accountAddrFelt, publicKey.String(), ks, 2)
 	if err != nil {
@@ -63,7 +63,11 @@ func (v *ValidatorAccount) GetTransactionStatus(ctx context.Context, transaction
 	return ((*account.Account)(v)).Provider.GetTransactionStatus(ctx, transactionHash)
 }
 
-func (v *ValidatorAccount) BuildAndSendInvokeTxn(ctx context.Context, functionCalls []rpc.InvokeFunctionCall, multiplier float64) (*rpc.AddInvokeTransactionResponse, error) {
+func (v *ValidatorAccount) BuildAndSendInvokeTxn(
+	ctx context.Context,
+	functionCalls []rpc.InvokeFunctionCall,
+	multiplier float64,
+) (*rpc.AddInvokeTransactionResponse, error) {
 	return ((*account.Account)(v)).BuildAndSendInvokeTxn(ctx, functionCalls, multiplier)
 }
 
@@ -77,6 +81,125 @@ func (v *ValidatorAccount) BlockWithTxHashes(ctx context.Context, blockID rpc.Bl
 
 func (v *ValidatorAccount) Address() *felt.Felt {
 	return v.AccountAddress
+}
+
+type ExternalSigner struct {
+	*rpc.Provider
+	OperationalAddress Address
+	ExternalSignerUrl  string
+	ChainId            felt.Felt
+}
+
+func NewExternalSigner(provider *rpc.Provider, operationalAddress Address, externalSignerUrl string) (ExternalSigner, error) {
+	chainID, err := provider.ChainID(context.Background())
+	if err != nil {
+		return ExternalSigner{}, err
+	}
+	chainId := new(felt.Felt).SetBytes([]byte(chainID))
+
+	return ExternalSigner{
+		Provider:           provider,
+		OperationalAddress: operationalAddress,
+		ExternalSignerUrl:  externalSignerUrl,
+		ChainId:            *chainId,
+	}, nil
+}
+
+func (s *ExternalSigner) Address() *felt.Felt {
+	addrFelt := s.OperationalAddress.ToFelt()
+	return &addrFelt
+}
+
+func (s *ExternalSigner) BuildAndSendInvokeTxn(
+	ctx context.Context,
+	functionCalls []rpc.InvokeFunctionCall,
+	multiplier float64,
+) (*rpc.AddInvokeTransactionResponse, error) {
+	nonce, err := s.Nonce(ctx, rpc.WithBlockTag("pending"), s.Address())
+	if err != nil {
+		return nil, err
+	}
+
+	fnCallData := utils.InvokeFuncCallsToFunctionCalls(functionCalls)
+	formattedCallData := account.FmtCallDataCairo2(fnCallData)
+
+	// Building and signing the txn, as it needs a signature to estimate the fee
+	broadcastInvokeTxnV3 := utils.BuildInvokeTxn(s.Address(), nonce, formattedCallData, makeResourceBoundsMapWithZeroValues())
+	if err := SignInvokeTx(&broadcastInvokeTxnV3.InvokeTxnV3, &s.ChainId, s.ExternalSignerUrl); err != nil {
+		return nil, err
+	}
+
+	// Estimate txn fee
+	estimateFee, err := s.EstimateFee(ctx, []rpc.BroadcastTxn{broadcastInvokeTxnV3}, []rpc.SimulationFlag{}, rpc.WithBlockTag("pending"))
+	if err != nil {
+		return nil, err
+	}
+	txnFee := estimateFee[0]
+	fillEmptyFeeEstimation(ctx, &txnFee, s.Provider) // temporary
+	broadcastInvokeTxnV3.ResourceBounds = utils.FeeEstToResBoundsMap(txnFee, multiplier)
+
+	// Signing the txn again with the estimated fee, as the fee value is used in the txn hash calculation
+	if err := SignInvokeTx(&broadcastInvokeTxnV3.InvokeTxnV3, &s.ChainId, s.ExternalSignerUrl); err != nil {
+		return nil, err
+	}
+
+	txRes, err := s.AddInvokeTransaction(ctx, broadcastInvokeTxnV3)
+	if err != nil {
+		return nil, err
+	}
+
+	return txRes, nil
+}
+
+func SignInvokeTx(invokeTxnV3 *rpc.InvokeTxnV3, chainId *felt.Felt, externalSignerUrl string) error {
+	hash, err := hash.TransactionHashInvokeV3(invokeTxnV3, chainId)
+	if err != nil {
+		return err
+	}
+
+	signResp, err := SignTxHash(hash, externalSignerUrl)
+	if err != nil {
+		return err
+	}
+
+	invokeTxnV3.Signature = signResp.Signature
+	return nil
+}
+
+// When there's no transaction in the pending block, the L1DataGasConsumed and L1DataGasPrice fields are comming empty.
+// This is causing the transaction to fail with the error:
+// "55 Account validation failed: Max L1DataGas amount (0) is lower than the minimal gas amount: 128"
+// This function fills the empty fields.
+//
+// TODO: remove this function once the issue is fixed in the RPC
+func fillEmptyFeeEstimation(ctx context.Context, feeEstimation *rpc.FeeEstimation, provider rpc.RpcProvider) {
+	if feeEstimation.L1DataGasConsumed.IsZero() {
+		// default value for L1DataGasConsumed in most cases
+		feeEstimation.L1DataGasConsumed = new(felt.Felt).SetUint64(224)
+	}
+	if feeEstimation.L1DataGasPrice.IsZero() {
+		// getting the L1DataGasPrice from the latest block as reference
+		result, _ := provider.BlockWithTxHashes(ctx, rpc.WithBlockTag("latest"))
+		block := result.(*rpc.BlockTxHashes)
+		feeEstimation.L1DataGasPrice = block.L1DataGasPrice.PriceInFRI
+	}
+}
+
+func makeResourceBoundsMapWithZeroValues() rpc.ResourceBoundsMapping {
+	return rpc.ResourceBoundsMapping{
+		L1Gas: rpc.ResourceBounds{
+			MaxAmount:       "0x0",
+			MaxPricePerUnit: "0x0",
+		},
+		L1DataGas: rpc.ResourceBounds{
+			MaxAmount:       "0x0",
+			MaxPricePerUnit: "0x0",
+		},
+		L2Gas: rpc.ResourceBounds{
+			MaxAmount:       "0x0",
+			MaxPricePerUnit: "0x0",
+		},
+	}
 }
 
 // I believe all these functions down here should be methods

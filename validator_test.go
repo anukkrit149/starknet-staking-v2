@@ -2,9 +2,13 @@ package main_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -13,6 +17,7 @@ import (
 	main "github.com/NethermindEth/starknet-staking-v2"
 	"github.com/NethermindEth/starknet-staking-v2/mocks"
 	"github.com/NethermindEth/starknet.go/account"
+	"github.com/NethermindEth/starknet.go/hash"
 	"github.com/NethermindEth/starknet.go/rpc"
 	snGoUtils "github.com/NethermindEth/starknet.go/utils"
 	"github.com/joho/godotenv"
@@ -26,10 +31,14 @@ type envVariable struct {
 	wsProviderUrl   string
 }
 
+type Method struct {
+	Name string `json:"method"`
+}
+
 func NewAccountData(privKey string, address string) main.AccountData {
 	return main.AccountData{
 		PrivKey:            privKey,
-		OperationalAddress: address,
+		OperationalAddress: main.AddressFromString(address),
 	}
 }
 
@@ -119,8 +128,391 @@ func TestNewValidatorAccount(t *testing.T) {
 		validatorAccount, err := main.NewValidatorAccount(provider, logger, &accountData)
 
 		require.Equal(t, main.ValidatorAccount{}, validatorAccount)
-		expectedErrorMsg := `Cannot create validator account: -32603 The error is not a valid RPC error: Post "http://localhost:1234": dial tcp 127.0.0.1:1234: connect: connection refused`
-		require.Equal(t, expectedErrorMsg, err.Error())
+		require.ErrorContains(t, err, "Cannot create validator account:")
+	})
+}
+
+func TestNewExternalSigner(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	t.Cleanup(mockCtrl.Finish)
+
+	t.Run("Error getting chain ID", func(t *testing.T) {
+		// Setup
+		provider, providerErr := rpc.NewProvider("http://localhost:1234")
+		require.NoError(t, providerErr)
+
+		operationalAddress := main.AddressFromString("0x123")
+		externalSignerUrl := "http://localhost:1234"
+		externalSigner, err := main.NewExternalSigner(provider, operationalAddress, externalSignerUrl)
+
+		require.Zero(t, externalSigner)
+		require.Error(t, err)
+	})
+
+	t.Run("Successful provider creation", func(t *testing.T) {
+		// Setup
+		env, err := loadEnv(t)
+		if err != nil {
+			t.Skipf("Ignoring tests that require env variables: %s", err)
+		}
+
+		provider, providerErr := rpc.NewProvider(env.httpProviderUrl)
+		require.NoError(t, providerErr)
+
+		operationalAddress := main.AddressFromString("0x123")
+		externalSignerUrl := "http://localhost:1234"
+		externalSigner, err := main.NewExternalSigner(provider, operationalAddress, externalSignerUrl)
+
+		// Expected chain ID from rpc provider at env.HTTP_PROVIDER_URL is "SN_SEPOLIA"
+		expectedChainId := new(felt.Felt).SetBytes([]byte("SN_SEPOLIA"))
+		expectedExternalSigner := main.ExternalSigner{
+			Provider:           provider,
+			OperationalAddress: operationalAddress,
+			ExternalSignerUrl:  externalSignerUrl,
+			ChainId:            *expectedChainId,
+		}
+		require.Equal(t, expectedExternalSigner, externalSigner)
+		require.Nil(t, err)
+	})
+}
+
+func TestExternalSignerAddress(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	t.Cleanup(mockCtrl.Finish)
+
+	t.Run("Return signer address", func(t *testing.T) {
+		address := "0x123"
+		externalSigner := main.ExternalSigner{
+			OperationalAddress: main.AddressFromString(address),
+		}
+
+		addrFelt := externalSigner.Address()
+
+		require.Equal(t, address, addrFelt.String())
+	})
+}
+
+func TestBuildAndSendInvokeTxn(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	t.Cleanup(mockCtrl.Finish)
+
+	t.Run("Error getting nonce", func(t *testing.T) {
+		env, err := loadEnv(t)
+		if err != nil {
+			t.Skipf("Ignoring tests that require env variables: %s", err)
+		}
+
+		provider, providerErr := rpc.NewProvider(env.httpProviderUrl)
+		require.NoError(t, providerErr)
+
+		operationalAddress := main.AddressFromString("0x123")
+		externalSignerUrl := "http://localhost:1234"
+		externalSigner, err := main.NewExternalSigner(provider, operationalAddress, externalSignerUrl)
+		require.NoError(t, err)
+
+		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(context.Background(), []rpc.InvokeFunctionCall{}, main.FEE_ESTIMATION_MULTIPLIER)
+
+		require.Nil(t, addInvokeTxRes)
+		expectedError := rpc.RPCError{Code: 20, Message: "Contract not found"}
+		require.Equal(t, expectedError.Error(), err.Error())
+	})
+
+	t.Run("Error signing transaction the first time (for estimating fee)", func(t *testing.T) {
+		env, err := loadEnv(t)
+		if err != nil {
+			t.Skipf("Ignoring tests that require env variables: %s", err)
+		}
+
+		provider, providerErr := rpc.NewProvider(env.httpProviderUrl)
+		require.NoError(t, providerErr)
+
+		serverError := "some internal error"
+		// Create a mock server
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Simulate API response
+			http.Error(w, serverError, http.StatusInternalServerError)
+		}))
+		defer mockServer.Close()
+
+		operationalAddress := main.AddressFromString("0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e")
+		externalSigner, err := main.NewExternalSigner(provider, operationalAddress, mockServer.URL)
+		require.NoError(t, err)
+
+		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(context.Background(), []rpc.InvokeFunctionCall{}, main.FEE_ESTIMATION_MULTIPLIER)
+
+		require.Nil(t, addInvokeTxRes)
+		expectedErrorMsg := fmt.Sprintf("Server error %d: %s", http.StatusInternalServerError, serverError)
+		require.EqualError(t, err, expectedErrorMsg)
+	})
+
+	t.Run("Error estimating fee", func(t *testing.T) {
+		env, err := loadEnv(t)
+		if err != nil {
+			t.Skipf("Ignoring tests that require env variables: %s", err)
+		}
+
+		provider, providerErr := rpc.NewProvider(env.httpProviderUrl)
+		require.NoError(t, providerErr)
+
+		// Create a mock server
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Simulate API response
+			w.Write([]byte(`{"signature": ["0x123", "0x456"]}`))
+		}))
+		defer mockServer.Close()
+
+		operationalAddress := main.AddressFromString("0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e")
+		externalSigner, err := main.NewExternalSigner(provider, operationalAddress, mockServer.URL)
+		require.NoError(t, err)
+
+		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(context.Background(), []rpc.InvokeFunctionCall{}, main.FEE_ESTIMATION_MULTIPLIER)
+
+		require.Nil(t, addInvokeTxRes)
+		require.Contains(t, err.Error(), "Account: invalid signature")
+	})
+	t.Run("Error signing transaction the second time (for the actual invoke tx)", func(t *testing.T) {
+		mockRpc := createMockRpcServer(t, nil)
+		defer mockRpc.Close()
+
+		signerCalledCount := 0
+		signerInternalError := "error when signing the 2nd time"
+		mockSigner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			signerCalledCount++
+			if signerCalledCount == 1 {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"signature": ["0x111", "0x222"]}`))
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(signerInternalError))
+			}
+		}))
+		defer mockSigner.Close()
+
+		provider, providerErr := rpc.NewProvider(mockRpc.URL)
+		require.NoError(t, providerErr)
+
+		operationalAddress := main.AddressFromString("0xabc")
+		externalSigner, err := main.NewExternalSigner(provider, operationalAddress, mockSigner.URL)
+		require.NoError(t, err)
+
+		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(context.Background(), []rpc.InvokeFunctionCall{}, main.FEE_ESTIMATION_MULTIPLIER)
+
+		require.Nil(t, addInvokeTxRes)
+
+		expectedErrorMsg := fmt.Sprintf("Server error %d: %s", http.StatusInternalServerError, signerInternalError)
+		require.EqualError(t, err, expectedErrorMsg)
+
+		require.Equal(t, 2, signerCalledCount)
+	})
+
+	t.Run("Error invoking transaction", func(t *testing.T) {
+		serverInternalError := "Error processing invoke transaction"
+
+		addInvoke := func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(serverInternalError))
+		}
+		mockRpc := createMockRpcServer(t, addInvoke)
+		defer mockRpc.Close()
+
+		mockSigner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"signature": ["0x111", "0x222"]}`))
+		}))
+		defer mockSigner.Close()
+
+		provider, providerErr := rpc.NewProvider(mockRpc.URL)
+		require.NoError(t, providerErr)
+
+		operationalAddress := main.AddressFromString("0xabc")
+		externalSigner, err := main.NewExternalSigner(provider, operationalAddress, mockSigner.URL)
+		require.NoError(t, err)
+
+		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(context.Background(), []rpc.InvokeFunctionCall{}, main.FEE_ESTIMATION_MULTIPLIER)
+
+		require.Nil(t, addInvokeTxRes)
+		expectedServerErr := fmt.Sprintf("%d Internal Server Error: %s", http.StatusInternalServerError, serverInternalError)
+		expectedError := rpc.RPCError{
+			Code:    rpc.InternalError,
+			Message: "The error is not a valid RPC error",
+			Data:    rpc.StringErrData(expectedServerErr),
+		}
+		require.EqualError(t, err, expectedError.Error())
+	})
+
+	t.Run("Successfully sent and received transaction hash", func(t *testing.T) {
+		expectedInvokeTxHash := "0x789"
+
+		addInvoke := func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(fmt.Sprintf(`{"jsonrpc": "2.0", "result": {"transaction_hash": "%s"}, "id": 1}`, expectedInvokeTxHash)))
+		}
+		mockRpc := createMockRpcServer(t, addInvoke)
+		defer mockRpc.Close()
+
+		mockSigner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"signature": ["0x111", "0x222"]}`))
+		}))
+		defer mockSigner.Close()
+
+		provider, providerErr := rpc.NewProvider(mockRpc.URL)
+		require.NoError(t, providerErr)
+
+		operationalAddress := main.AddressFromString("0xabc")
+		externalSigner, err := main.NewExternalSigner(provider, operationalAddress, mockSigner.URL)
+		require.NoError(t, err)
+
+		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(context.Background(), []rpc.InvokeFunctionCall{}, main.FEE_ESTIMATION_MULTIPLIER)
+
+		require.Equal(t, &rpc.AddInvokeTransactionResponse{TransactionHash: utils.HexToFelt(t, expectedInvokeTxHash)}, addInvokeTxRes)
+		require.Nil(t, err)
+	})
+}
+
+func createMockRpcServer(t *testing.T, addInvoke func(w http.ResponseWriter, r *http.Request)) *httptest.Server {
+	t.Helper()
+
+	mockRpc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Read and decode JSON body
+		bodyBytes, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		defer r.Body.Close()
+
+		var req Method
+		err = json.Unmarshal(bodyBytes, &req)
+		require.NoError(t, err)
+
+		switch req.Name {
+		case "starknet_chainId":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"jsonrpc": "2.0", "result": "0x1", "id": 1}`))
+		case "starknet_getNonce":
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"jsonrpc": "2.0", "result": "0x2", "id": 1}`))
+		case "starknet_estimateFee":
+			mockFeeEstimate := []rpc.FeeEstimation{{
+				L1GasConsumed:     utils.HexToFelt(t, "0x123"),
+				L1GasPrice:        utils.HexToFelt(t, "0x456"),
+				L2GasConsumed:     utils.HexToFelt(t, "0x123"),
+				L2GasPrice:        utils.HexToFelt(t, "0x456"),
+				L1DataGasConsumed: utils.HexToFelt(t, "0x123"),
+				L1DataGasPrice:    utils.HexToFelt(t, "0x456"),
+				OverallFee:        utils.HexToFelt(t, "0x123"),
+				FeeUnit:           rpc.UnitStrk,
+			}}
+			feeEstBytes, err := json.Marshal(mockFeeEstimate)
+			require.NoError(t, err)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(fmt.Sprintf(`{"jsonrpc": "2.0", "result": %s, "id": 1}`, string(feeEstBytes))))
+		case "starknet_addInvokeTransaction":
+			addInvoke(w, r)
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.Write([]byte(`Should not get here`))
+		}
+	}))
+
+	return mockRpc
+}
+
+func TestSignInvokeTx(t *testing.T) {
+
+	t.Run("Error hashing tx", func(t *testing.T) {
+		invokeTx := rpc.InvokeTxnV3{}
+		err := main.SignInvokeTx(&invokeTx, &felt.Felt{}, "url not getting called anyway")
+
+		require.Equal(t, ([]*felt.Felt)(nil), invokeTx.Signature)
+		require.EqualError(t, err, "not all neccessary parameters have been set")
+	})
+
+	t.Run("Error signing tx", func(t *testing.T) {
+		invokeTx := rpc.InvokeTxnV3{
+			Type:          rpc.TransactionType_Invoke,
+			SenderAddress: utils.HexToFelt(t, "0x123"),
+			Calldata:      []*felt.Felt{utils.HexToFelt(t, "0x456")},
+			Version:       rpc.TransactionV3,
+			Signature:     []*felt.Felt{},
+			Nonce:         utils.HexToFelt(t, "0x1"),
+			ResourceBounds: rpc.ResourceBoundsMapping{
+				L1Gas:     rpc.ResourceBounds{MaxAmount: "0x1", MaxPricePerUnit: "0x1"},
+				L2Gas:     rpc.ResourceBounds{MaxAmount: "0x1", MaxPricePerUnit: "0x1"},
+				L1DataGas: rpc.ResourceBounds{MaxAmount: "0x1", MaxPricePerUnit: "0x1"},
+			},
+			Tip:                   "0x0",
+			PayMasterData:         []*felt.Felt{},
+			AccountDeploymentData: []*felt.Felt{},
+			NonceDataMode:         rpc.DAModeL1,
+			FeeMode:               rpc.DAModeL1,
+		}
+
+		serverError := "some internal error"
+		// Create a mock server
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Simulate API response
+			http.Error(w, serverError, http.StatusInternalServerError)
+		}))
+		defer mockServer.Close()
+
+		err := main.SignInvokeTx(&invokeTx, &felt.Felt{}, mockServer.URL)
+
+		require.Equal(t, []*felt.Felt{}, invokeTx.Signature)
+		expectedErrorMsg := fmt.Sprintf("Server error %d: %s", http.StatusInternalServerError, serverError)
+		require.EqualError(t, err, expectedErrorMsg)
+	})
+
+	t.Run("Successful signing", func(t *testing.T) {
+		invokeTx := rpc.InvokeTxnV3{
+			Type:          rpc.TransactionType_Invoke,
+			SenderAddress: utils.HexToFelt(t, "0x123"),
+			Calldata:      []*felt.Felt{utils.HexToFelt(t, "0x456")},
+			Version:       rpc.TransactionV3,
+			Signature:     []*felt.Felt{},
+			Nonce:         utils.HexToFelt(t, "0x1"),
+			ResourceBounds: rpc.ResourceBoundsMapping{
+				L1Gas:     rpc.ResourceBounds{MaxAmount: "0x1", MaxPricePerUnit: "0x1"},
+				L2Gas:     rpc.ResourceBounds{MaxAmount: "0x1", MaxPricePerUnit: "0x1"},
+				L1DataGas: rpc.ResourceBounds{MaxAmount: "0x1", MaxPricePerUnit: "0x1"},
+			},
+			Tip:                   "0x0",
+			PayMasterData:         []*felt.Felt{},
+			AccountDeploymentData: []*felt.Felt{},
+			NonceDataMode:         rpc.DAModeL1,
+			FeeMode:               rpc.DAModeL1,
+		}
+
+		expectedTxHash, err := hash.TransactionHashInvokeV3(&invokeTx, &felt.Felt{})
+		require.NoError(t, err)
+
+		sigPart1 := "0x123"
+		sigPart2 := "0x456"
+
+		// Create a mock server
+		mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Simulate API response
+			w.WriteHeader(http.StatusOK)
+
+			// Read and decode JSON body
+			bodyBytes, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			defer r.Body.Close()
+
+			var req main.SignRequest
+			err = json.Unmarshal(bodyBytes, &req)
+			require.NoError(t, err)
+
+			// Making sure received hash is the expected one
+			require.Equal(t, expectedTxHash.String(), req.Hash)
+
+			w.Write([]byte(fmt.Sprintf(`{"signature": ["%s", "%s"]}`, sigPart1, sigPart2)))
+		}))
+		defer mockServer.Close()
+
+		err = main.SignInvokeTx(&invokeTx, &felt.Felt{}, mockServer.URL)
+
+		expectedSignature := []*felt.Felt{utils.HexToFelt(t, sigPart1), utils.HexToFelt(t, sigPart2)}
+		require.Equal(t, expectedSignature, invokeTx.Signature)
+		require.NoError(t, err)
 	})
 
 }

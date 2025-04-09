@@ -22,6 +22,19 @@ func AddressFromString(addrStr string) Address {
 	return Address(*adr)
 }
 
+func (a *Address) UnmarshalJSON(data []byte) error {
+	var f felt.Felt
+	if err := f.UnmarshalJSON(data); err != nil {
+		return err
+	}
+	*a = Address(f)
+	return nil
+}
+
+func (a Address) MarshalJSON() ([]byte, error) {
+	return (*felt.Felt)(&a).MarshalJSON()
+}
+
 type Balance felt.Felt
 
 type BlockNumber uint64
