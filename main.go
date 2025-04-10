@@ -14,64 +14,77 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TODO(rdr): make fields required so that if they are not set then the tool signals it and fails
-type AccountData struct {
+type Provider struct {
+	Http string `json:"http"`
+	Ws   string `json:"ws"`
+}
+
+type Signer struct {
+	ExternalUrl        string  `json:"url"`
 	PrivKey            string  `json:"privateKey"`
 	OperationalAddress Address `json:"operationalAddress"`
 }
 
+func (s *Signer) External() bool {
+	return s.ExternalUrl != ""
+}
+
 type Config struct {
-	HttpProviderUrl string `json:"httpProviderUrl"`
-	// TODO: should we have this additional url or do we parse the http one and create a ws out of it ?
-	// I think having a 2nd one is more flexible
-	WsProviderUrl     string `json:"wsProviderUrl"`
-	ExternalSignerUrl string `json:"externalSignerUrl"`
-	AccountData
-	useLocalSigner bool // not exported, set in preRunE
+	Provider Provider `json:"provider"`
+	Signer   Signer   `json:"signer"`
 }
 
 // Function to load and parse the JSON file
-func LoadConfig(filePath string) (Config, error) {
-	file, err := os.ReadFile(filePath)
+func ConfigFromFile(filePath string) (Config, error) {
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return Config{}, err
 	}
+	return ConfigFromData(data)
+}
 
+func ConfigFromData(data []byte) (Config, error) {
 	var config Config
-	err = json.Unmarshal(file, &config)
-	if err != nil {
+	if err := json.Unmarshal(data, &config); err != nil {
+		return Config{}, err
+	}
+	if err := checkConfig(&config); err != nil {
 		return Config{}, err
 	}
 
 	return config, nil
 }
 
-func VerifyLoadedConfig(config Config, useLocalSigner bool, useExternalSigner bool) error {
-	if config.HttpProviderUrl == "" {
-		return missingConfigGeneralField("httpProviderUrl")
+func checkConfig(config *Config) error {
+	if err := checkProvider(&config.Provider); err != nil {
+		return err
 	}
-
-	if config.WsProviderUrl == "" {
-		return missingConfigGeneralField("wsProviderUrl")
+	if err := checkSigner(&config.Signer); err != nil {
+		return err
 	}
+	return nil
+}
 
-	if config.OperationalAddress == Address(felt.Zero) {
-		return missingConfigGeneralField("operationalAddress")
+func checkProvider(provider *Provider) error {
+	if provider.Http == "" {
+		return errors.New("http provider url not set in config")
 	}
-
-	// Enforce mutually exclusive flags
-	if useLocalSigner == useExternalSigner {
-		return errors.New("you must specify exactly one of --local-signer or --external-signer")
+	if provider.Ws == "" {
+		return errors.New("ws provider url not set in config")
 	}
+	return nil
+}
 
-	if useLocalSigner && config.PrivKey == "" {
-		return missingConfigSignerField("privateKey", "--local-signer")
+func checkSigner(signer *Signer) error {
+	if signer.OperationalAddress == Address(felt.Zero) {
+		return errors.New("operational address is not set in config")
 	}
-
-	if useExternalSigner && config.ExternalSignerUrl == "" {
-		return missingConfigSignerField("externalSignerUrl", "--external-signer")
+	if signer.External() {
+		return nil
 	}
-
+	if signer.PrivKey == "" {
+		return errors.New("signer private key is not set in config")
+	}
 	return nil
 }
 
@@ -82,21 +95,12 @@ func NewCommand() cobra.Command {
 	var config Config
 	var logger utils.ZapLogger
 
-	var useLocalSigner bool
-	var useExternalSigner bool
-
 	preRunE := func(cmd *cobra.Command, args []string) error {
-		loadedConfig, err := LoadConfig(configPathF)
+		loadedConfig, err := ConfigFromFile(configPathF)
 		if err != nil {
 			return err
 		}
-
-		if err := VerifyLoadedConfig(loadedConfig, useLocalSigner, useExternalSigner); err != nil {
-			return err
-		}
-
 		config = loadedConfig
-		config.useLocalSigner = useLocalSigner
 
 		var logLevel utils.LogLevel
 		if err := logLevel.Set(logLevelF); err != nil {
@@ -131,10 +135,6 @@ func NewCommand() cobra.Command {
 	rootCmd.Flags().StringVar(
 		&logLevelF, "log-level", utils.INFO.String(), "Options: trace, debug, info, warn, error.",
 	)
-
-	// Mutually exclusive signer flags
-	rootCmd.Flags().BoolVar(&useLocalSigner, "local-signer", false, "Use a local signer")
-	rootCmd.Flags().BoolVar(&useExternalSigner, "external-signer", false, "Use an external signer (HTTP)")
 
 	return rootCmd
 }
