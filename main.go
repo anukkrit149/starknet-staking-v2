@@ -14,15 +14,43 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func isZero[T comparable](v T) bool {
+	var x T
+	return v == x
+}
+
 type Provider struct {
 	Http string `json:"http"`
 	Ws   string `json:"ws"`
 }
 
+// Merge it's missing fields with data from other provider
+func (p *Provider) Fill(other *Provider) {
+	if isZero(p.Http) {
+		p.Http = other.Http
+	}
+	if isZero(p.Ws) {
+		p.Ws = other.Ws
+	}
+}
+
 type Signer struct {
-	ExternalUrl        string  `json:"url"`
-	PrivKey            string  `json:"privateKey"`
-	OperationalAddress Address `json:"operationalAddress"`
+	ExternalUrl        string `json:"url"`
+	PrivKey            string `json:"privateKey"`
+	OperationalAddress string `json:"operationalAddress"`
+}
+
+// Merge it's missing fields with data from other signer
+func (s *Signer) Fill(other *Signer) {
+	if isZero(s.ExternalUrl) {
+		s.ExternalUrl = other.ExternalUrl
+	}
+	if isZero(s.PrivKey) {
+		s.PrivKey = other.PrivKey
+	}
+	if isZero(s.OperationalAddress) {
+		s.OperationalAddress = other.OperationalAddress
+	}
 }
 
 func (s *Signer) External() bool {
@@ -48,18 +76,21 @@ func ConfigFromData(data []byte) (Config, error) {
 	if err := json.Unmarshal(data, &config); err != nil {
 		return Config{}, err
 	}
-	if err := checkConfig(&config); err != nil {
-		return Config{}, err
-	}
-
 	return config, nil
 }
 
-func checkConfig(config *Config) error {
-	if err := checkProvider(&config.Provider); err != nil {
+// Fills it's missing fields with data from other config
+func (c *Config) Fill(other *Config) {
+	c.Provider.Fill(&other.Provider)
+	c.Signer.Fill(&other.Signer)
+}
+
+// Verifies it's data is appropiatly set
+func (c *Config) Check() error {
+	if err := checkProvider(&c.Provider); err != nil {
 		return err
 	}
-	if err := checkSigner(&config.Signer); err != nil {
+	if err := checkSigner(&c.Signer); err != nil {
 		return err
 	}
 	return nil
@@ -67,40 +98,45 @@ func checkConfig(config *Config) error {
 
 func checkProvider(provider *Provider) error {
 	if provider.Http == "" {
-		return errors.New("http provider url not set in config")
+		return errors.New("http provider url not set in provider config")
 	}
 	if provider.Ws == "" {
-		return errors.New("ws provider url not set in config")
+		return errors.New("ws provider url not set in provder config")
 	}
 	return nil
 }
 
 func checkSigner(signer *Signer) error {
-	if signer.OperationalAddress == Address(felt.Zero) {
-		return errors.New("operational address is not set in config")
+	if signer.OperationalAddress == "" {
+		return errors.New("operational address is not set in signer config")
 	}
 	if signer.External() {
 		return nil
 	}
 	if signer.PrivKey == "" {
-		return errors.New("signer private key is not set in config")
+		return errors.New("neither private key nor url properties set in signer config")
 	}
 	return nil
 }
 
 func NewCommand() cobra.Command {
-	var configPathF string
+	var configPath string
 	var logLevelF string
 
 	var config Config
 	var logger utils.ZapLogger
 
 	preRunE := func(cmd *cobra.Command, args []string) error {
-		loadedConfig, err := ConfigFromFile(configPathF)
-		if err != nil {
+		if configPath != "" {
+			fileConfig, err := ConfigFromFile(configPath)
+			if err != nil {
+				return err
+			}
+			config.Fill(&fileConfig)
+		}
+		if err := config.Check(); err != nil {
 			return err
 		}
-		config = loadedConfig
 
 		var logLevel utils.LogLevel
 		if err := logLevel.Set(logLevelF); err != nil {
@@ -129,9 +165,30 @@ func NewCommand() cobra.Command {
 		Args:    cobra.NoArgs,
 	}
 
-	rootCmd.Flags().StringVarP(&configPathF, "config", "c", "", "Path to JSON config file")
-	rootCmd.MarkFlagRequired("config")
+	// Config file path flag
+	rootCmd.Flags().StringVarP(&configPath, "config", "c", "", "Path to JSON config file")
 
+	// Config provider flags
+	rootCmd.Flags().StringVar(&config.Provider.Http, "provider-http", "", "Provider http address")
+	rootCmd.Flags().StringVar(&config.Provider.Ws, "provider-ws", "", "Provider ws address")
+	// Config signer flags
+	rootCmd.Flags().StringVar(
+		&config.Signer.ExternalUrl,
+		"signer-url",
+		"",
+		"Signer url address, required if using an external signer",
+	)
+	rootCmd.Flags().StringVar(
+		&config.Signer.PrivKey, "signer-priv-key", "", "Signer private key, required for signing",
+	)
+	rootCmd.Flags().StringVar(
+		&config.Signer.OperationalAddress,
+		"signer-op-address",
+		"",
+		"Signer operational address, required for attesting",
+	)
+
+	// Other flags
 	rootCmd.Flags().StringVar(
 		&logLevelF, "log-level", utils.INFO.String(), "Options: trace, debug, info, warn, error.",
 	)
