@@ -2,7 +2,7 @@ package validator
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -57,33 +57,44 @@ func (d *EventDispatcher[Account, Log]) Dispatch(
 				return
 			}
 
-			if event == d.CurrentAttest && (d.CurrentAttestStatus == Ongoing || d.CurrentAttestStatus == Successful) {
+			if event == d.CurrentAttest &&
+				(d.CurrentAttestStatus == Ongoing || d.CurrentAttestStatus == Successful) {
 				continue
 			}
 
 			d.CurrentAttest = event
 			d.CurrentAttestStatus = Ongoing
 
-			logger.Infow("Attestation sent", "block hash", event.BlockHash.String())
+			logger.Infow("Invoking attest", "block hash", event.BlockHash.String())
 			resp, err := InvokeAttest(account, &event)
 			if err != nil {
-				logger.Errorw("Failed to attest", "block hash", event.BlockHash.String(), "error", err)
+				logger.Errorw(
+					"Failed to attest", "block hash", event.BlockHash.String(), "error", err,
+				)
 				d.CurrentAttestStatus = Failed
 				continue
 			}
+			logger.Debugw("Attest transaction sent", "hash", resp.TransactionHash)
 
 			wg.Go(func() {
 				txStatus := TrackAttest(account, logger, &event, resp)
-				// Even if tx tracking takes time, we have at least MIN_ATTESTATION_WINDOW blocks before next attest
-				// so, we can assume we're safe to update the status (for the expected target block, and not the next one)
+				// Even if tx tracking takes time, we have at least MIN_ATTESTATION_WINDOW blocks
+				// before next attest. We can assume we're safe to update the status (for the
+				// expected target block, and not the next one)
 				d.CurrentAttestStatus = txStatus
 			})
 		case <-d.EndOfWindow:
 			logger.Infow("End of window reached")
 			if d.CurrentAttestStatus == Successful {
-				logger.Infow("Successfully attested to target block", "target block hash", d.CurrentAttest.BlockHash.String())
+				logger.Infow(
+					"Successfully attested to target block",
+					"target block hash", d.CurrentAttest.BlockHash.String(),
+				)
 			} else {
-				logger.Infow("Failed to attest to target block", "target block hash", d.CurrentAttest.BlockHash.String())
+				logger.Infow(
+					"Failed to attest to target block",
+					"target block hash", d.CurrentAttest.BlockHash.String(),
+				)
 			}
 		}
 	}
@@ -136,30 +147,39 @@ func TrackAttest[Account Accounter, Log Logger](
 	return Successful
 }
 
-func TrackTransactionStatus[Account Accounter, Log Logger](account Account, logger Log, txHash *felt.Felt) (*rpc.TxnStatusResp, error) {
+func TrackTransactionStatus[Account Accounter, Log Logger](
+	account Account, logger Log, txHash *felt.Felt,
+) (*rpc.TxnStatusResp, error) {
+	println("a0")
 	for elapsedSeconds := 0; elapsedSeconds < DEFAULT_MAX_RETRIES; elapsedSeconds++ {
 		txStatus, err := account.GetTransactionStatus(context.Background(), txHash)
-
 		if err != nil && err.Error() != ErrTxnHashNotFound.Error() {
 			return nil, err
 		}
 		if err == nil && txStatus.FinalityStatus != rpc.TxnStatus_Received {
+			println("Done")
 			return txStatus, nil
 		}
 
 		if err != nil {
 			logger.Infow(
-				"Attest transaction status was not found: tracking was too fast for sequencer to be aware of transaction, retrying...",
-				"transaction hash", txHash,
+				"Transaction status was not found. Retrying...",
+				"hash", txHash,
 			)
 		} else {
-			logger.Infow("Attest transaction status was RECEIVED: retrying tracking it...", "transaction hash", txHash)
+			logger.Infow(
+				"Transaction status was RECEIVED. Retrying...",
+				"hash", txHash,
+			)
 		}
-
 		Sleep(time.Second)
 	}
 
-	// If we are here, it means the transaction didn't change it's status for `DEFAULT_MAX_RETRIES` seconds
+	// If we are here, it means the transaction didn't change it's status for `DEFAULT_MAX_RETRIES`
+	// seconds
 	// Return and retry from the next block (if still in attestation window)
-	return nil, errors.New("Tx status did not change for at least " + strconv.Itoa(DEFAULT_MAX_RETRIES) + " seconds, retrying from next block")
+	return nil, fmt.Errorf(
+		"tx status did not change for at least %s seconds",
+		strconv.Itoa(DEFAULT_MAX_RETRIES),
+	)
 }

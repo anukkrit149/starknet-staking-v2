@@ -18,7 +18,6 @@ import (
 	"github.com/NethermindEth/starknet-staking-v2/signer"
 	"github.com/NethermindEth/starknet-staking-v2/validator"
 	"github.com/NethermindEth/starknet.go/account"
-	"github.com/NethermindEth/starknet.go/hash"
 	"github.com/NethermindEth/starknet.go/rpc"
 	snGoUtils "github.com/NethermindEth/starknet.go/utils"
 	"github.com/joho/godotenv"
@@ -482,14 +481,6 @@ func createMockRpcServer(
 }
 
 func TestSignInvokeTx(t *testing.T) {
-	t.Run("Error hashing tx", func(t *testing.T) {
-		invokeTx := rpc.InvokeTxnV3{}
-		err := validator.SignInvokeTx(&invokeTx, &felt.Felt{}, "url not getting called anyway")
-
-		require.Equal(t, ([]*felt.Felt)(nil), invokeTx.Signature)
-		require.EqualError(t, err, "not all neccessary parameters have been set")
-	})
-
 	t.Run("Error signing tx", func(t *testing.T) {
 		invokeTx := rpc.InvokeTxnV3{
 			Type:          rpc.TransactionType_Invoke,
@@ -551,8 +542,7 @@ func TestSignInvokeTx(t *testing.T) {
 			FeeMode:               rpc.DAModeL1,
 		}
 
-		expectedTxHash, err := hash.TransactionHashInvokeV3(&invokeTx, &felt.Zero)
-		require.NoError(t, err)
+		chainId := new(felt.Felt).SetUint64(1)
 
 		sigR := new(felt.Felt).SetUint64(0x123)
 		sigS := new(felt.Felt).SetUint64(0x456)
@@ -565,28 +555,28 @@ func TestSignInvokeTx(t *testing.T) {
 					// Simulate API response
 					w.WriteHeader(http.StatusOK)
 
-					// Read and decode JSON body
 					bodyBytes, err := io.ReadAll(r.Body)
 					require.NoError(t, err)
-					defer require.NoError(t, r.Body.Close())
 
-					var request signer.Request
-					err = json.Unmarshal(bodyBytes, &request)
+					var req signer.Request
+					err = json.Unmarshal(bodyBytes, &req)
 					require.NoError(t, err)
 
-					// Making sure received hash is the expected one
-					require.Equal(t, *expectedTxHash, request.Hash)
+					// Making sure received tx and chainId are the expected ones
+					require.Equal(t, &invokeTx, req.InvokeTxnV3)
+					require.Equal(t, chainId, req.ChainId)
 
 					_, err = fmt.Fprintf(w, `{"signature": ["%s", "%s"]}`, sigR, sigS)
 					require.NoError(t, err)
 				}))
 		defer mockServer.Close()
 
-		err = validator.SignInvokeTx(&invokeTx, &felt.Felt{}, mockServer.URL)
-		require.NoError(t, err)
+		err := validator.SignInvokeTx(&invokeTx, chainId, mockServer.URL)
 
 		expectedSignature := []*felt.Felt{sigR, sigS}
 		require.Equal(t, expectedSignature, invokeTx.Signature)
+
+		require.NoError(t, err)
 	})
 }
 
