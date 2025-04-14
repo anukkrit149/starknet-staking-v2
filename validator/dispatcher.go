@@ -150,14 +150,12 @@ func TrackAttest[Account Accounter, Log Logger](
 func TrackTransactionStatus[Account Accounter, Log Logger](
 	account Account, logger Log, txHash *felt.Felt,
 ) (*rpc.TxnStatusResp, error) {
-	println("a0")
 	for elapsedSeconds := 0; elapsedSeconds < DEFAULT_MAX_RETRIES; elapsedSeconds++ {
 		txStatus, err := account.GetTransactionStatus(context.Background(), txHash)
 		if err != nil && err.Error() != ErrTxnHashNotFound.Error() {
 			return nil, err
 		}
 		if err == nil && txStatus.FinalityStatus != rpc.TxnStatus_Received {
-			println("Done")
 			return txStatus, nil
 		}
 
