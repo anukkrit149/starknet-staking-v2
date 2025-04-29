@@ -1,22 +1,18 @@
-package validator_test
+package config
 
 import (
 	"os"
 	"testing"
 
-	"github.com/NethermindEth/juno/utils"
-	"github.com/NethermindEth/starknet-staking-v2/validator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
-	"lukechampine.com/uint128"
 )
 
 func TestConfigFromFile(t *testing.T) {
 	t.Run("Error when reading from file", func(t *testing.T) {
-		config, err := validator.ConfigFromFile("some non existing file name hopefully")
+		config, err := ConfigFromFile("some non existing file name hopefully")
 
-		require.Equal(t, validator.Config{}, config)
+		require.Equal(t, Config{}, config)
 		require.ErrorIs(t, err, os.ErrNotExist)
 	})
 
@@ -37,9 +33,9 @@ func TestConfigFromFile(t *testing.T) {
 		}
 		require.NoError(t, tmpFile.Close())
 
-		config, err := validator.ConfigFromFile(tmpFile.Name())
+		config, err := ConfigFromFile(tmpFile.Name())
 
-		require.Equal(t, validator.Config{}, config)
+		require.Equal(t, Config{}, config)
 		require.NotNil(t, err)
 	})
 
@@ -55,16 +51,16 @@ func TestConfigFromFile(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := validator.ConfigFromData(data)
+		config, err := ConfigFromData(data)
 		require.NoError(t, err)
 		require.NoError(t, config.Check())
 
-		expectedConfig := validator.Config{
-			Provider: validator.Provider{
+		expectedConfig := Config{
+			Provider: Provider{
 				Http: "http://localhost:1234",
 				Ws:   "ws://localhost:1235",
 			},
-			Signer: validator.Signer{
+			Signer: Signer{
 				ExternalUrl:        "http://localhost:5678",
 				PrivKey:            "0x123",
 				OperationalAddress: "0x456",
@@ -81,8 +77,8 @@ func TestConfigFromEnv(t *testing.T) {
 	ws, unset := setEnv(t, "PROVIDER_WS_URL", "ola")
 	defer unset()
 
-	provider := validator.ProviderFromEnv()
-	expectedProvider := validator.Provider{
+	provider := ProviderFromEnv()
+	expectedProvider := Provider{
 		Http: http,
 		Ws:   ws,
 	}
@@ -100,8 +96,8 @@ func TestConfigFromEnv(t *testing.T) {
 	operationalAddress, unset := setEnv(t, "SIGNER_OPERATIONAL_ADDRESS", "hallo")
 	defer unset()
 
-	signer := validator.SignerFromEnv()
-	expectedSigner := validator.Signer{
+	signer := SignerFromEnv()
+	expectedSigner := Signer{
 		ExternalUrl:        url,
 		PrivKey:            privateKey,
 		OperationalAddress: operationalAddress,
@@ -113,8 +109,8 @@ func TestConfigFromEnv(t *testing.T) {
 	)
 
 	// Test Config
-	config := validator.ConfigFromEnv()
-	expectedConfig := validator.Config{
+	config := ConfigFromEnv()
+	expectedConfig := Config{
 		Provider: expectedProvider,
 		Signer:   expectedSigner,
 	}
@@ -133,7 +129,7 @@ func TestCorrectConfig(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := validator.ConfigFromData(data)
+		config, err := ConfigFromData(data)
 		require.NoError(t, err)
 		require.ErrorContains(t, config.Check(), "http provider url")
 	})
@@ -149,7 +145,7 @@ func TestCorrectConfig(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := validator.ConfigFromData(data)
+		config, err := ConfigFromData(data)
 		require.NoError(t, err)
 		require.ErrorContains(t, config.Check(), "ws provider url")
 	})
@@ -165,7 +161,7 @@ func TestCorrectConfig(t *testing.T) {
                 "privateKey": "0x123"
             }
         }`)
-		config, err := validator.ConfigFromData(data)
+		config, err := ConfigFromData(data)
 		require.NoError(t, err)
 		require.ErrorContains(t, config.Check(), "operational address")
 	})
@@ -181,7 +177,7 @@ func TestCorrectConfig(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := validator.ConfigFromData(data)
+		config, err := ConfigFromData(data)
 		require.NoError(t, err)
 		require.NoError(t, config.Check())
 		require.False(t, config.Signer.External())
@@ -198,7 +194,7 @@ func TestCorrectConfig(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := validator.ConfigFromData(data)
+		config, err := ConfigFromData(data)
 		require.NoError(t, err)
 		require.NoError(t, config.Check())
 		require.True(t, config.Signer.External())
@@ -214,7 +210,7 @@ func TestCorrectConfig(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := validator.ConfigFromData(data)
+		config, err := ConfigFromData(data)
 		require.NoError(t, err)
 		require.ErrorContains(t, config.Check(), "private key")
 	})
@@ -222,7 +218,7 @@ func TestCorrectConfig(t *testing.T) {
 
 func TestConfigFill(t *testing.T) {
 	// Test data
-	config1, err := validator.ConfigFromData(
+	config1, err := ConfigFromData(
 		[]byte(`{
             "provider": {
                 "http": "http://localhost:1234"
@@ -234,7 +230,7 @@ func TestConfigFill(t *testing.T) {
         }`),
 	)
 	require.NoError(t, err)
-	config2, err := validator.ConfigFromData([]byte(`{
+	config2, err := ConfigFromData([]byte(`{
             "provider": {
                 "http": "http://localhost:9999",
                 "ws": "ws://localhost:1235"
@@ -248,7 +244,7 @@ func TestConfigFill(t *testing.T) {
 	require.NoError(t, err)
 
 	// Expected values
-	expectedConfig1, err := validator.ConfigFromData(
+	expectedConfig1, err := ConfigFromData(
 		[]byte(`{
             "provider": {
                 "http": "http://localhost:1234",
@@ -268,58 +264,6 @@ func TestConfigFill(t *testing.T) {
 	config1.Fill(&config2)
 	assert.Equal(t, expectedConfig1, config1)
 	assert.Equal(t, expectedConfig2, config2)
-}
-
-func TestComputeBlockNumberToAttestTo(t *testing.T) {
-	mockCtrl := gomock.NewController(t)
-	t.Cleanup(mockCtrl.Finish)
-
-	t.Run("Correct target block number computation - example 1", func(t *testing.T) {
-		stakerAddress := utils.HexToFelt(t, "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e")
-		epochInfo := validator.EpochInfo{
-			StakerAddress:             validator.Address(*stakerAddress),
-			Stake:                     uint128.From64(1000000000000000000),
-			EpochLen:                  40,
-			EpochId:                   1516,
-			CurrentEpochStartingBlock: validator.BlockNumber(639270),
-		}
-		attestationWindow := uint64(16)
-
-		blockNumber := validator.ComputeBlockNumberToAttestTo(&epochInfo, attestationWindow)
-
-		require.Equal(t, validator.BlockNumber(639291), blockNumber)
-	})
-
-	t.Run("Correct target block number computation - example 2", func(t *testing.T) {
-		stakerAddress := utils.HexToFelt(t, "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e")
-		epochInfo := validator.EpochInfo{
-			StakerAddress:             validator.Address(*stakerAddress),
-			Stake:                     uint128.From64(1000000000000000000),
-			EpochLen:                  40,
-			EpochId:                   1517,
-			CurrentEpochStartingBlock: validator.BlockNumber(639310),
-		}
-		attestationWindow := uint64(16)
-
-		blockNumber := validator.ComputeBlockNumberToAttestTo(&epochInfo, attestationWindow)
-		require.Equal(t, validator.BlockNumber(639316), blockNumber)
-	})
-
-	t.Run("Correct target block number computation - example 3", func(t *testing.T) {
-		stakerAddress := utils.HexToFelt(t, "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e")
-		epochInfo := validator.EpochInfo{
-			StakerAddress:             validator.Address(*stakerAddress),
-			Stake:                     uint128.From64(1000000000000000000),
-			EpochLen:                  40,
-			EpochId:                   1518,
-			CurrentEpochStartingBlock: validator.BlockNumber(639350),
-		}
-		attestationWindow := uint64(16)
-
-		blockNumber := validator.ComputeBlockNumberToAttestTo(&epochInfo, attestationWindow)
-
-		require.Equal(t, validator.BlockNumber(639369), blockNumber)
-	})
 }
 
 // Set environment variable `varname` to `value` if it is unset. Returns the value of

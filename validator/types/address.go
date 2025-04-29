@@ -1,0 +1,35 @@
+package types
+
+import "github.com/NethermindEth/juno/core/felt"
+
+type Address felt.Felt
+
+func (a *Address) Felt() *felt.Felt {
+	return (*felt.Felt)(a)
+}
+
+func AddressFromString(addrStr string) Address {
+	adr, err := new(felt.Felt).SetString(addrStr)
+	if err != nil {
+		panic(err)
+	}
+
+	return Address(*adr)
+}
+
+func (a *Address) String() string {
+	return (*felt.Felt)(a).String()
+}
+
+func (a *Address) UnmarshalJSON(data []byte) error {
+	var f felt.Felt
+	if err := f.UnmarshalJSON(data); err != nil {
+		return err
+	}
+	*a = Address(f)
+	return nil
+}
+
+func (a Address) MarshalJSON() ([]byte, error) {
+	return (*felt.Felt)(&a).MarshalJSON()
+}

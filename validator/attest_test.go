@@ -15,6 +15,8 @@ import (
 	"github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet-staking-v2/mocks"
 	"github.com/NethermindEth/starknet-staking-v2/validator"
+	"github.com/NethermindEth/starknet-staking-v2/validator/config"
+	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/NethermindEth/starknet.go/rpc"
 	snGoUtils "github.com/NethermindEth/starknet.go/utils"
 	"github.com/cockroachdb/errors"
@@ -37,12 +39,12 @@ func TestAttest(t *testing.T) {
 		mockRpc := mockRpcServer(t, operationalAddress, serverInternalError)
 		defer mockRpc.Close()
 
-		config := &validator.Config{
-			Provider: validator.Provider{
+		config := &config.Config{
+			Provider: config.Provider{
 				Http: mockRpc.URL,
 				Ws:   env.wsProviderUrl,
 			},
-			Signer: validator.Signer{
+			Signer: config.Signer{
 				OperationalAddress: operationalAddress.String(),
 				ExternalUrl:        "http://localhost:5678",
 			},
@@ -77,12 +79,12 @@ func TestAttest(t *testing.T) {
 		mockRpc := mockRpcServer(t, operationalAddress, serverInternalError)
 		defer mockRpc.Close()
 
-		config := &validator.Config{
-			Provider: validator.Provider{
+		config := &config.Config{
+			Provider: config.Provider{
 				Http: mockRpc.URL,
 				Ws:   env.wsProviderUrl,
 			},
-			Signer: validator.Signer{
+			Signer: config.Signer{
 				OperationalAddress: operationalAddress.String(),
 				PrivKey:            "0x123",
 			},
@@ -176,7 +178,7 @@ func TestProcessBlockHeaders(t *testing.T) {
 
 		attestWindow := uint64(16)
 		epoch := validator.EpochInfo{
-			StakerAddress:             validator.AddressFromString("0x123"),
+			StakerAddress:             types.AddressFromString("0x123"),
 			Stake:                     uint128.New(1000000000000000000, 0),
 			EpochId:                   1516,
 			CurrentEpochStartingBlock: 639270,
@@ -239,7 +241,7 @@ func TestProcessBlockHeaders(t *testing.T) {
 		dispatcher := validator.NewEventDispatcher[*mocks.MockAccounter]()
 		headersFeed := make(chan *rpc.BlockHeader)
 
-		stakerAddress := validator.AddressFromString("0x123")
+		stakerAddress := types.AddressFromString("0x123")
 		stake := uint128.New(1000000000000000000, 0)
 		epochLength := uint64(40)
 		attestWindow := uint64(16)
@@ -332,7 +334,7 @@ func TestProcessBlockHeaders(t *testing.T) {
 		dispatcher := validator.NewEventDispatcher[*mocks.MockAccounter]()
 		headersFeed := make(chan *rpc.BlockHeader)
 
-		stakerAddress := validator.AddressFromString("0x11efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e")
+		stakerAddress := types.AddressFromString("0x11efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e")
 		stake := uint128.New(1000000000000000000, 0)
 		epochLength := uint64(40)
 		attestWindow := uint64(16)

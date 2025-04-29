@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	main "github.com/NethermindEth/starknet-staking-v2/cmd/validator"
-	"github.com/NethermindEth/starknet-staking-v2/validator"
+	"github.com/NethermindEth/starknet-staking-v2/validator/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,12 +23,12 @@ func TestNewCommand(t *testing.T) {
 	t.Run("PreRunE returns an error: config file verification fails", func(t *testing.T) {
 		command := main.NewCommand()
 
-		config := validator.Config{
-			Provider: validator.Provider{
+		config := config.Config{
+			Provider: config.Provider{
 				Http: "http://localhost:1234",
 				Ws:   "ws://localhost:1235",
 			},
-			Signer: validator.Signer{
+			Signer: config.Signer{
 				OperationalAddress: "0x456",
 			},
 		}
@@ -44,12 +44,12 @@ func TestNewCommand(t *testing.T) {
 	t.Run("Full command setup works with config file", func(t *testing.T) {
 		command := main.NewCommand()
 
-		config := validator.Config{
-			Provider: validator.Provider{
+		config := config.Config{
+			Provider: config.Provider{
 				Http: "http://localhost:1234",
 				Ws:   "ws://localhost:1235",
 			},
-			Signer: validator.Signer{
+			Signer: config.Signer{
 				OperationalAddress: "0x456",
 				PrivKey:            "0x123",
 			},
@@ -76,7 +76,7 @@ func TestNewCommand(t *testing.T) {
 	})
 
 	t.Run("Full command setup works with config file and with flags", func(t *testing.T) {
-		config, err := validator.ConfigFromData([]byte(`{
+		config, err := config.ConfigFromData([]byte(`{
             "provider": {
                 "http": "http://localhost:1234"
             },
@@ -101,7 +101,7 @@ func TestNewCommand(t *testing.T) {
 	})
 	t.Run("Priority order is flags -> env vars -> config file", func(t *testing.T) {
 		// Configuration through file
-		config, err := validator.ConfigFromData([]byte(`{
+		config, err := config.ConfigFromData([]byte(`{
             "provider": {
                 "http": "http://localhost:1234",
                 "ws": "ws://localhost:1235"
@@ -135,7 +135,7 @@ func TestNewCommand(t *testing.T) {
 	})
 }
 
-func createTemporaryConfigFile(t *testing.T, config *validator.Config) string {
+func createTemporaryConfigFile(t *testing.T, config *config.Config) string {
 	t.Helper()
 
 	// Create a temporary file

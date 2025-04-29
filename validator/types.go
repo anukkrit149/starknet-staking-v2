@@ -1,85 +1,14 @@
 package validator
 
-import (
-	"fmt"
-	"log"
+import "github.com/NethermindEth/starknet-staking-v2/validator/types"
 
-	"github.com/NethermindEth/juno/core/felt"
-	"lukechampine.com/uint128"
+type (
+	Address        = types.Address
+	AttestFee      = types.AttestFee
+	AttestInfo     = types.AttestInfo
+	AttestRequired = types.AttestRequired
+	Balance        = types.Balance
+	BlockHash      = types.BlockHash
+	BlockNumber    = types.BlockNumber
+	EpochInfo      = types.EpochInfo
 )
-
-type Address felt.Felt
-
-func (a *Address) Felt() *felt.Felt {
-	return (*felt.Felt)(a)
-}
-
-func AddressFromString(addrStr string) Address {
-	adr, err := new(felt.Felt).SetString(addrStr)
-	if err != nil {
-		log.Fatalf("Could not create felt address from addr %s, error: %s", addrStr, err)
-	}
-
-	return Address(*adr)
-}
-
-func (a *Address) String() string {
-	return (*felt.Felt)(a).String()
-}
-
-func (a *Address) UnmarshalJSON(data []byte) error {
-	var f felt.Felt
-	if err := f.UnmarshalJSON(data); err != nil {
-		return err
-	}
-	*a = Address(f)
-	return nil
-}
-
-func (a Address) MarshalJSON() ([]byte, error) {
-	return (*felt.Felt)(&a).MarshalJSON()
-}
-
-type Balance felt.Felt
-
-type BlockNumber uint64
-
-func (b BlockNumber) Uint64() uint64 {
-	return uint64(b)
-}
-
-type BlockHash felt.Felt
-
-func (b *BlockHash) Felt() *felt.Felt {
-	return (*felt.Felt)(b)
-}
-
-func (b *BlockHash) String() string {
-	return (*felt.Felt)(b).String()
-}
-
-type EpochInfo struct {
-	StakerAddress             Address         `json:"staker_address"`
-	Stake                     uint128.Uint128 `json:"stake"`
-	EpochLen                  uint64          `json:"epoch_len"`
-	EpochId                   uint64          `json:"epoch_id"`
-	CurrentEpochStartingBlock BlockNumber     `json:"current_epoch_starting_block"`
-}
-
-func (e *EpochInfo) String() string {
-	return fmt.Sprintf(
-		"EpochInfo{StakerAddress: %s, Stake: %s, EpochId: %d, EpochLen: %d, CurrentEpochStartingBlock: %d}",
-		e.StakerAddress.Felt().String(), e.Stake, e.EpochId, e.EpochLen, e.CurrentEpochStartingBlock,
-	)
-}
-
-type AttestRequired struct {
-	BlockHash BlockHash
-}
-
-type AttestInfo struct {
-	TargetBlock     BlockNumber
-	TargetBlockHash BlockHash
-	WindowStart     BlockNumber
-	WindowEnd       BlockNumber
-}

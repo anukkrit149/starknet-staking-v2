@@ -11,6 +11,8 @@ import (
 
 	"github.com/NethermindEth/juno/core/felt"
 	"github.com/NethermindEth/starknet-staking-v2/signer"
+	"github.com/NethermindEth/starknet-staking-v2/validator/config"
+	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/NethermindEth/starknet.go/account"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/NethermindEth/starknet.go/utils"
@@ -24,7 +26,7 @@ type ExternalSigner struct {
 	Url                string
 }
 
-func NewExternalSigner(provider *rpc.Provider, signer *Signer) (ExternalSigner, error) {
+func NewExternalSigner(provider *rpc.Provider, signer *config.Signer) (ExternalSigner, error) {
 	chainID, err := provider.ChainID(context.Background())
 	if err != nil {
 		return ExternalSigner{}, err
@@ -33,7 +35,7 @@ func NewExternalSigner(provider *rpc.Provider, signer *Signer) (ExternalSigner, 
 
 	return ExternalSigner{
 		Provider:           provider,
-		OperationalAddress: AddressFromString(signer.OperationalAddress),
+		OperationalAddress: types.AddressFromString(signer.OperationalAddress),
 		Url:                signer.ExternalUrl,
 		ChainId:            *chainId,
 	}, nil

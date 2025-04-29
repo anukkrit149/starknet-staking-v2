@@ -17,6 +17,8 @@ import (
 	"github.com/NethermindEth/starknet-staking-v2/mocks"
 	"github.com/NethermindEth/starknet-staking-v2/signer"
 	"github.com/NethermindEth/starknet-staking-v2/validator"
+	"github.com/NethermindEth/starknet-staking-v2/validator/config"
+	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/NethermindEth/starknet.go/account"
 	"github.com/NethermindEth/starknet.go/rpc"
 	snGoUtils "github.com/NethermindEth/starknet.go/utils"
@@ -73,7 +75,7 @@ func TestNewValidatorAccount(t *testing.T) {
 			require.NoError(t, providerErr)
 
 			validatorAccount, err := validator.NewInternalSigner(
-				provider, logger, &validator.Signer{},
+				provider, logger, &config.Signer{},
 			)
 
 			require.Equal(t, validator.InternalSigner{}, validatorAccount)
@@ -86,7 +88,7 @@ func TestNewValidatorAccount(t *testing.T) {
 			provider, err := rpc.NewProvider(envVars.httpProviderUrl)
 			require.NoError(t, err)
 
-			signer := validator.Signer{
+			signer := config.Signer{
 				PrivKey:            "0x123",
 				OperationalAddress: "0x456",
 			}
@@ -120,7 +122,7 @@ func TestNewValidatorAccount(t *testing.T) {
 		provider, providerErr := rpc.NewProvider("http://localhost:1234")
 		require.NoError(t, providerErr)
 
-		accountData := validator.Signer{
+		accountData := config.Signer{
 			PrivKey:            "0x123",
 			OperationalAddress: "0x456",
 		}
@@ -140,7 +142,7 @@ func TestNewExternalSigner(t *testing.T) {
 		provider, providerErr := rpc.NewProvider("http://localhost:1234")
 		require.NoError(t, providerErr)
 
-		signer := validator.Signer{
+		signer := config.Signer{
 			ExternalUrl:        "http://localhost:1234",
 			OperationalAddress: "0x123",
 		}
@@ -160,14 +162,14 @@ func TestNewExternalSigner(t *testing.T) {
 		provider, providerErr := rpc.NewProvider(env.httpProviderUrl)
 		require.NoError(t, providerErr)
 
-		signer := validator.Signer{
+		signer := config.Signer{
 			ExternalUrl:        "http://localhost:1234",
 			OperationalAddress: "0x123",
 		}
 		externalSigner, err := validator.NewExternalSigner(provider, &signer)
 
 		// Expected chain ID from rpc provider at env.HTTP_PROVIDER_URL is "SN_SEPOLIA"
-		expectedOpAddr := validator.AddressFromString(signer.OperationalAddress)
+		expectedOpAddr := types.AddressFromString(signer.OperationalAddress)
 		expectedChainId := new(felt.Felt).SetBytes([]byte("SN_SEPOLIA"))
 		expectedExternalSigner := validator.ExternalSigner{
 			Provider:           provider,
@@ -187,7 +189,7 @@ func TestExternalSignerAddress(t *testing.T) {
 	t.Run("Return signer address", func(t *testing.T) {
 		address := "0x123"
 		externalSigner := validator.ExternalSigner{
-			OperationalAddress: validator.AddressFromString(address),
+			OperationalAddress: types.AddressFromString(address),
 		}
 
 		addrFelt := externalSigner.Address()
@@ -209,7 +211,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 		provider, providerErr := rpc.NewProvider(env.httpProviderUrl)
 		require.NoError(t, providerErr)
 
-		signer := validator.Signer{
+		signer := config.Signer{
 			ExternalUrl:        "http://localhost:1234",
 			OperationalAddress: "0x123",
 		}
@@ -244,7 +246,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 				}))
 		defer mockServer.Close()
 
-		signer := validator.Signer{
+		signer := config.Signer{
 			ExternalUrl:        mockServer.URL,
 			OperationalAddress: "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e",
 		}
@@ -281,7 +283,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 				}))
 		defer mockServer.Close()
 
-		signer := validator.Signer{
+		signer := config.Signer{
 			ExternalUrl:        mockServer.URL,
 			OperationalAddress: "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e",
 		}
@@ -321,7 +323,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 			provider, providerErr := rpc.NewProvider(mockRpc.URL)
 			require.NoError(t, providerErr)
 
-			signer := validator.Signer{
+			signer := config.Signer{
 				ExternalUrl:        mockSigner.URL,
 				OperationalAddress: "0xabc",
 			}
@@ -365,7 +367,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 		provider, providerErr := rpc.NewProvider(mockRpc.URL)
 		require.NoError(t, providerErr)
 
-		signer := validator.Signer{
+		signer := config.Signer{
 			ExternalUrl:        mockSigner.URL,
 			OperationalAddress: "0xabc",
 		}
@@ -411,7 +413,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 		provider, providerErr := rpc.NewProvider(mockRpc.URL)
 		require.NoError(t, providerErr)
 
-		signer := validator.Signer{
+		signer := config.Signer{
 			ExternalUrl:        mockSigner.URL,
 			OperationalAddress: "0xabc",
 		}
@@ -1009,5 +1011,56 @@ func TestInvokeAttest(t *testing.T) {
 
 		require.Equal(t, &response, invokeRes)
 		require.Nil(t, err)
+	})
+}
+func TestComputeBlockNumberToAttestTo(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	t.Cleanup(mockCtrl.Finish)
+
+	t.Run("Correct target block number computation - example 1", func(t *testing.T) {
+		stakerAddress := utils.HexToFelt(t, "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e")
+		epochInfo := validator.EpochInfo{
+			StakerAddress:             validator.Address(*stakerAddress),
+			Stake:                     uint128.From64(1000000000000000000),
+			EpochLen:                  40,
+			EpochId:                   1516,
+			CurrentEpochStartingBlock: validator.BlockNumber(639270),
+		}
+		attestationWindow := uint64(16)
+
+		blockNumber := validator.ComputeBlockNumberToAttestTo(&epochInfo, attestationWindow)
+
+		require.Equal(t, validator.BlockNumber(639291), blockNumber)
+	})
+
+	t.Run("Correct target block number computation - example 2", func(t *testing.T) {
+		stakerAddress := utils.HexToFelt(t, "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e")
+		epochInfo := validator.EpochInfo{
+			StakerAddress:             validator.Address(*stakerAddress),
+			Stake:                     uint128.From64(1000000000000000000),
+			EpochLen:                  40,
+			EpochId:                   1517,
+			CurrentEpochStartingBlock: validator.BlockNumber(639310),
+		}
+		attestationWindow := uint64(16)
+
+		blockNumber := validator.ComputeBlockNumberToAttestTo(&epochInfo, attestationWindow)
+		require.Equal(t, validator.BlockNumber(639316), blockNumber)
+	})
+
+	t.Run("Correct target block number computation - example 3", func(t *testing.T) {
+		stakerAddress := utils.HexToFelt(t, "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e")
+		epochInfo := validator.EpochInfo{
+			StakerAddress:             validator.Address(*stakerAddress),
+			Stake:                     uint128.From64(1000000000000000000),
+			EpochLen:                  40,
+			EpochId:                   1518,
+			CurrentEpochStartingBlock: validator.BlockNumber(639350),
+		}
+		attestationWindow := uint64(16)
+
+		blockNumber := validator.ComputeBlockNumberToAttestTo(&epochInfo, attestationWindow)
+
+		require.Equal(t, validator.BlockNumber(639369), blockNumber)
 	})
 }

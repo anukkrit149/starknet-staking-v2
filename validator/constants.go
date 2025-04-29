@@ -1,5 +1,7 @@
 package validator
 
+import "github.com/NethermindEth/starknet-staking-v2/validator/types"
+
 const (
 	STAKING_CONTRACT_ADDRESS  = "0x03745ab04a431fc02871a139be6b93d9260b0ff3e779ad9c8b377183b23109f1"
 	ATTEST_CONTRACT_ADDRESS   = "0x3f32e152b9637c31bfcf73e434f78591067a01ba070505ff6ee195642c9acfb"
@@ -11,7 +13,7 @@ const (
 )
 
 var (
-	StakingContract   = AddressFromString(STAKING_CONTRACT_ADDRESS)
-	AttestContract    = AddressFromString(ATTEST_CONTRACT_ADDRESS)
-	StrkTokenContract = AddressFromString(STRK_CONTRACT_ADDRESS)
+	StakingContract   = types.AddressFromString(STAKING_CONTRACT_ADDRESS)
+	AttestContract    = types.AddressFromString(ATTEST_CONTRACT_ADDRESS)
+	StrkTokenContract = types.AddressFromString(STRK_CONTRACT_ADDRESS)
 )

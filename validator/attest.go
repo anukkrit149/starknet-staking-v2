@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/NethermindEth/juno/utils"
+	"github.com/NethermindEth/starknet-staking-v2/validator/config"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/cockroachdb/errors"
 	"github.com/sourcegraph/conc"
@@ -13,7 +14,7 @@ import (
 
 // Main execution loop of the program. Listens to the blockchain and sends
 // attest invoke when it's the right time
-func Attest(config *Config, logger utils.ZapLogger) error {
+func Attest(config *config.Config, logger utils.ZapLogger) error {
 	provider, err := NewProvider(config.Provider.Http, &logger)
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func Attest(config *Config, logger utils.ZapLogger) error {
 }
 
 func RunBlockHeaderWatcher[Account Accounter](
-	config *Config,
+	config *config.Config,
 	logger *utils.ZapLogger,
 	signer Account,
 	dispatcher *EventDispatcher[Account],

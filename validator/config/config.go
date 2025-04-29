@@ -1,18 +1,15 @@
-package validator
+package config
 
 import (
 	"encoding/json"
 	"errors"
-	"math/big"
 	"os"
-
-	"github.com/NethermindEth/juno/core/crypto"
-	"github.com/NethermindEth/juno/core/felt"
 )
 
-func isZero[T comparable](v T) bool {
-	var x T
-	return v == x
+type Starknet struct {
+	StakingContract string `json:"stakingContractAddress"`
+	AttestContract  string `json:"attestContractAddress"`
+	AttestFee       string `json:"attestFee"`
 }
 
 type Provider struct {
@@ -137,18 +134,7 @@ func (c *Config) Check() error {
 	return nil
 }
 
-func ComputeBlockNumberToAttestTo(epochInfo *EpochInfo, attestWindow uint64) BlockNumber {
-	hash := crypto.PoseidonArray(
-		new(felt.Felt).SetBigInt(epochInfo.Stake.Big()),
-		new(felt.Felt).SetUint64(epochInfo.EpochId),
-		epochInfo.StakerAddress.Felt(),
-	)
-
-	hashBigInt := new(big.Int)
-	hashBigInt = hash.BigInt(hashBigInt)
-
-	blockOffset := new(big.Int)
-	blockOffset = blockOffset.Mod(hashBigInt, big.NewInt(int64(epochInfo.EpochLen-attestWindow)))
-
-	return BlockNumber(epochInfo.CurrentEpochStartingBlock.Uint64() + blockOffset.Uint64())
+func isZero[T comparable](v T) bool {
+	var x T
+	return v == x
 }

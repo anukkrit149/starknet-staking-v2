@@ -4,8 +4,11 @@ import (
 	"context"
 	"math/big"
 
+	"github.com/NethermindEth/juno/core/crypto"
 	"github.com/NethermindEth/juno/core/felt"
 	junoUtils "github.com/NethermindEth/juno/utils"
+	"github.com/NethermindEth/starknet-staking-v2/validator/config"
+	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/NethermindEth/starknet.go/account"
 	"github.com/NethermindEth/starknet.go/curve"
 	"github.com/NethermindEth/starknet.go/rpc"
@@ -37,7 +40,7 @@ type Accounter interface {
 type InternalSigner account.Account
 
 func NewInternalSigner[Logger junoUtils.Logger](
-	provider *rpc.Provider, logger Logger, signer *Signer,
+	provider *rpc.Provider, logger Logger, signer *config.Signer,
 ) (InternalSigner, error) {
 	privateKey, ok := new(big.Int).SetString(signer.PrivKey, 0)
 	if !ok {
@@ -52,7 +55,7 @@ func NewInternalSigner[Logger junoUtils.Logger](
 	publicKeyStr := publicKey.String()
 	ks := account.SetNewMemKeystore(publicKeyStr, privateKey)
 
-	accountAddr := AddressFromString(signer.OperationalAddress)
+	accountAddr := types.AddressFromString(signer.OperationalAddress)
 	account, err := account.NewAccount(provider, accountAddr.Felt(), publicKeyStr, ks, 2)
 	if err != nil {
 		return InternalSigner{}, errors.Errorf("Cannot create validator account: %s", err)
@@ -218,4 +221,20 @@ func InvokeAttest[Account Accounter](account Account, attest *AttestRequired) (
 	}}
 
 	return account.BuildAndSendInvokeTxn(context.Background(), calls, FEE_ESTIMATION_MULTIPLIER)
+}
+
+func ComputeBlockNumberToAttestTo(epochInfo *EpochInfo, attestWindow uint64) BlockNumber {
+	hash := crypto.PoseidonArray(
+		new(felt.Felt).SetBigInt(epochInfo.Stake.Big()),
+		new(felt.Felt).SetUint64(epochInfo.EpochId),
+		epochInfo.StakerAddress.Felt(),
+	)
+
+	hashBigInt := new(big.Int)
+	hashBigInt = hash.BigInt(hashBigInt)
+
+	blockOffset := new(big.Int)
+	blockOffset = blockOffset.Mod(hashBigInt, big.NewInt(int64(epochInfo.EpochLen-attestWindow)))
+
+	return BlockNumber(epochInfo.CurrentEpochStartingBlock.Uint64() + blockOffset.Uint64())
 }

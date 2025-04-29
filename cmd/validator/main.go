@@ -7,6 +7,7 @@ import (
 
 	"github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet-staking-v2/validator"
+	configP "github.com/NethermindEth/starknet-staking-v2/validator/config"
 	"github.com/spf13/cobra"
 )
 
@@ -14,19 +15,19 @@ func NewCommand() cobra.Command {
 	var configPath string
 	var logLevelF string
 
-	var config validator.Config
+	var config configP.Config
 	var logger utils.ZapLogger
 
 	preRunE := func(cmd *cobra.Command, args []string) error {
 		// Config takes the values from flags directly,
 		// then fills the missing ones from the env vars
-		configFromEnv := validator.ConfigFromEnv()
+		configFromEnv := configP.ConfigFromEnv()
 		config.Fill(&configFromEnv)
 
 		// It fills the missing one from the ones defined
 		// in a config file
 		if configPath != "" {
-			configFromFile, err := validator.ConfigFromFile(configPath)
+			configFromFile, err := configP.ConfigFromFile(configPath)
 			if err != nil {
 				return err
 			}
