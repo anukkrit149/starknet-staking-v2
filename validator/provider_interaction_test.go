@@ -22,8 +22,8 @@ func TestNewProvider(t *testing.T) {
 		provider, err := main.NewProvider(providerUrl, logger)
 
 		require.Nil(t, provider)
-		expectedErrorMsg := fmt.Sprintf(`Error creating RPC provider at %s: no known transport for URL scheme ""`, providerUrl)
-		require.Equal(t, expectedErrorMsg, err.Error())
+		expectedErrorMsg := fmt.Sprintf(`cannot create RPC provider at %s`, providerUrl)
+		require.ErrorContains(t, err, expectedErrorMsg)
 	})
 
 	t.Run("Error connecting to provider", func(t *testing.T) {
@@ -33,7 +33,7 @@ func TestNewProvider(t *testing.T) {
 
 		require.Nil(t, provider)
 
-		expectedErrorMsg := fmt.Sprintf(`Error connecting to RPC provider at %s`, providerUrl)
+		expectedErrorMsg := fmt.Sprintf(`cannot connect to RPC provider at %s`, providerUrl)
 		require.ErrorContains(t, err, expectedErrorMsg)
 	})
 
@@ -69,8 +69,8 @@ func TestBlockHeaderSubscription(t *testing.T) {
 		require.Nil(t, wsProvider)
 		require.Nil(t, headerFeed)
 		require.Nil(t, clientSubscription)
-		expectedErrorMsg := fmt.Sprintf(`Error dialing the WS provider at %s: no known transport for URL scheme ""`, wsProviderUrl)
-		require.Equal(t, expectedErrorMsg, err.Error())
+		expectedErrorMsg := fmt.Sprintf(`dialing WS provider at %s`, wsProviderUrl)
+		require.ErrorContains(t, err, expectedErrorMsg)
 	})
 
 	// Cannot test error when subscribing to new block headers

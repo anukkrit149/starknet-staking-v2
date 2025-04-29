@@ -697,7 +697,7 @@ func TestFetchEpochAndAttestInfoWithRetry(t *testing.T) {
 			mockAccount,
 			noOpLogger,
 			&epoch1,
-			validator.IsEpochSwitchCorrect,
+			validator.CorrectEpochSwitch,
 			strconv.FormatUint(epoch1.EpochId+1, 10),
 		)
 
@@ -752,7 +752,7 @@ func TestFetchEpochAndAttestInfoWithRetry(t *testing.T) {
 			mockAccount,
 			noOpLogger,
 			&epoch1,
-			validator.IsEpochSwitchCorrect,
+			validator.CorrectEpochSwitch,
 			strconv.FormatUint(epoch1.EpochId+1, 10),
 		)
 

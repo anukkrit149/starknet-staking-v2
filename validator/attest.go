@@ -65,9 +65,8 @@ func RunBlockHeaderWatcher[Account Accounter](
 		stopProcessingHeaders := make(chan error)
 
 		wg.Go(func() {
-			// If err is nil, it means headersFeed channel has been closed due to clientSubscription.Err().
-			// In that case, we don't need to do anything. A ws connection retry will already have been triggered.
-			if err := ProcessBlockHeaders(headersFeed, signer, logger, dispatcher); err != nil {
+			err := ProcessBlockHeaders(headersFeed, signer, logger, dispatcher)
+			if err != nil {
 				stopProcessingHeaders <- err
 			}
 		})
@@ -91,7 +90,9 @@ func ProcessBlockHeaders[Account Accounter](
 	dispatcher *EventDispatcher[Account],
 ) error {
 	noEpochSwitch := func(*EpochInfo, *EpochInfo) bool { return true }
-	epochInfo, attestInfo, err := FetchEpochAndAttestInfoWithRetry(account, logger, nil, noEpochSwitch, "at app startup")
+	epochInfo, attestInfo, err := FetchEpochAndAttestInfoWithRetry(
+		account, logger, nil, noEpochSwitch, "at app startup",
+	)
 	if err != nil {
 		return err
 	}
@@ -99,24 +100,34 @@ func ProcessBlockHeaders[Account Accounter](
 	SetTargetBlockHashIfExists(account, logger, &attestInfo)
 
 	for blockHeader := range headersFeed {
-		logger.Infow("Block header received", "blockHeader", blockHeader)
+		logger.Infow("Block header received", "block header", blockHeader)
 
-		// Re-fetch epoch info on new epoch (validity guaranteed for 1 epoch even if updates are made)
 		if blockHeader.BlockNumber == epochInfo.CurrentEpochStartingBlock.Uint64()+epochInfo.EpochLen {
 			logger.Infow("New epoch start", "epoch id", epochInfo.EpochId+1)
 			prevEpochInfo := epochInfo
-
-			if epochInfo, attestInfo, err = FetchEpochAndAttestInfoWithRetry(
-				account, logger, &prevEpochInfo, IsEpochSwitchCorrect, strconv.FormatUint(prevEpochInfo.EpochId+1, 10),
-			); err != nil {
+			epochInfo, attestInfo, err = FetchEpochAndAttestInfoWithRetry(
+				account,
+				logger,
+				&prevEpochInfo,
+				CorrectEpochSwitch,
+				strconv.FormatUint(prevEpochInfo.EpochId+1, 10),
+			)
+			if err != nil {
 				return err
 			}
 		}
 
 		if BlockNumber(blockHeader.BlockNumber) == attestInfo.TargetBlock {
-			logger.Infow("Target block reached", "block number", blockHeader.BlockNumber, "block hash", blockHeader.BlockHash)
 			attestInfo.TargetBlockHash = BlockHash(*blockHeader.BlockHash)
-			logger.Infof("Will attest to target block in window [%d, %d]", attestInfo.WindowStart, attestInfo.WindowEnd)
+			logger.Infow(
+				"Target block reached",
+				"block number", blockHeader.BlockNumber,
+				"block hash", blockHeader.BlockHash,
+			)
+			logger.Infow("Window to attest to",
+				"start", attestInfo.WindowStart,
+				"end", attestInfo.WindowEnd,
+			)
 		}
 
 		if BlockNumber(blockHeader.BlockNumber) >= attestInfo.WindowStart-1 &&
@@ -140,18 +151,19 @@ func SetTargetBlockHashIfExists[Account Accounter](
 	attestInfo *AttestInfo,
 ) {
 	targetBlockNumber := attestInfo.TargetBlock.Uint64()
-	res, err := account.BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockNumber})
+	res, err := account.BlockWithTxHashes(
+		context.Background(), rpc.BlockID{Number: &targetBlockNumber},
+	)
 
 	// If no error, then target block already exists
 	if err == nil {
 		if block, ok := res.(*rpc.BlockTxHashes); ok {
 			attestInfo.TargetBlockHash = BlockHash(*block.BlockHash)
 			logger.Infow(
-				"Target block already exists, registered block hash to attest to it if still within attestation window",
+				"Target block already exists, registered block hash to attest to.",
 				"block hash", attestInfo.TargetBlockHash.String(),
 			)
 		}
-		// If case *rpc.PendingBlockTxHashes, then we'll just receive the block in the listening for loop
 	}
 }
 
@@ -175,7 +187,6 @@ func FetchEpochAndAttestInfoWithRetry[Account Accounter](
 		newEpoch, newAttestInfo, err = FetchEpochAndAttestInfo(account, logger)
 	}
 
-	// If there is still an issue after all retries, exit program
 	if err != nil {
 		return EpochInfo{},
 			AttestInfo{},
@@ -191,7 +202,7 @@ func FetchEpochAndAttestInfoWithRetry[Account Accounter](
 	return newEpoch, newAttestInfo, nil
 }
 
-func IsEpochSwitchCorrect(prevEpoch *EpochInfo, newEpoch *EpochInfo) bool {
+func CorrectEpochSwitch(prevEpoch *EpochInfo, newEpoch *EpochInfo) bool {
 	return newEpoch.EpochId == prevEpoch.EpochId+1 &&
 		newEpoch.CurrentEpochStartingBlock.Uint64() == prevEpoch.CurrentEpochStartingBlock.Uint64()+prevEpoch.EpochLen
 }
