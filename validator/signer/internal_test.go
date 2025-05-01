@@ -28,68 +28,75 @@ import (
 	"lukechampine.com/uint128"
 )
 
-func TestNewValidatorAccount(t *testing.T) {
+func TestNewInternalSigner(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	t.Cleanup(mockCtrl.Finish)
 
 	logger := utils.NewNopZapLogger()
-	envVars, err := validator.LoadEnv(t)
-	loadedEnvVars := err == nil
+	envVars, envVarsErr := validator.LoadEnv(t)
+	loadedEnvVars := envVarsErr == nil
 
 	contractAddresses := new(config.ContractAddresses).SetDefaults("sepolia")
 
-	if loadedEnvVars {
-		t.Run("Error: private key conversion", func(t *testing.T) {
-			provider, providerErr := rpc.NewProvider(envVars.HttpProviderUrl)
-			require.NoError(t, providerErr)
+	t.Run("Error: private key conversion", func(t *testing.T) {
+		if !loadedEnvVars {
+			t.Skipf("couldn't load env vars: %s", envVarsErr.Error())
+		}
 
-			validatorAccount, err := signer.NewInternalSigner(
-				provider, logger, &config.Signer{}, contractAddresses,
-			)
+		provider, providerErr := rpc.NewProvider(envVars.HttpProviderUrl)
+		require.NoError(t, providerErr)
 
-			require.Equal(t, signer.InternalSigner{}, validatorAccount)
-			expectedErrorMsg := fmt.Sprintf(
-				"Cannot turn private key %s into a big int", (*big.Int)(nil),
-			)
-			require.Equal(t, expectedErrorMsg, err.Error())
-		})
-		t.Run("Successful account creation", func(t *testing.T) {
-			provider, err := rpc.NewProvider(envVars.HttpProviderUrl)
-			require.NoError(t, err)
+		validatorAccount, err := signer.NewInternalSigner(
+			provider, logger, &config.Signer{}, contractAddresses,
+		)
 
-			configSigner := config.Signer{
-				PrivKey:            "0x123",
-				OperationalAddress: "0x456",
-			}
+		require.Equal(t, signer.InternalSigner{}, validatorAccount)
+		expectedErrorMsg := fmt.Sprintf(
+			"Cannot turn private key %s into a big int", (*big.Int)(nil),
+		)
+		require.Equal(t, expectedErrorMsg, err.Error())
+	})
+	t.Run("Successful account creation", func(t *testing.T) {
+		if !loadedEnvVars {
+			t.Skipf("couldn't load env vars: %s", envVarsErr.Error())
+		}
 
-			// Test
-			internalSigner, err := signer.NewInternalSigner(
-				provider, logger, &configSigner, contractAddresses,
-			)
-			require.NoError(t, err)
+		println(envVars.HttpProviderUrl)
+		provider, err := rpc.NewProvider(envVars.HttpProviderUrl)
+		require.NoError(t, err)
 
-			// Assert
-			accountAddr, err := new(felt.Felt).SetString(configSigner.OperationalAddress)
-			require.NoError(t, err)
+		configSigner := config.Signer{
+			PrivKey:            "0x123",
+			OperationalAddress: "0x456",
+		}
 
-			privateKeyBigInt := big.NewInt(0x123)
-			// This is the public key for private key "0x123"
-			publicKey := "2443263864760624031255983690848140455871762770061978316256189704907682682390"
-			ks := account.SetNewMemKeystore(publicKey, privateKeyBigInt)
+		// Test
+		internalSigner, err := signer.NewInternalSigner(
+			provider, logger, &configSigner, contractAddresses,
+		)
+		require.NoError(t, err)
 
-			expectedAccount, err := account.NewAccount(
-				provider, accountAddr, publicKey, ks, 2,
-			)
+		// Assert
+		accountAddr, err := new(felt.Felt).SetString(configSigner.OperationalAddress)
+		require.NoError(t, err)
 
-			require.NoError(t, err)
-			require.Equal(t, expectedAccount, internalSigner.Account)
-			require.Equal(t, contractAddresses, internalSigner.ValidationContracts())
+		privateKeyBigInt := big.NewInt(0x123)
+		// This is the public key for private key "0x123"
+		publicKey := "2443263864760624031255983690848140455871762770061978316256189704907682682390"
+		ks := account.SetNewMemKeystore(publicKey, privateKeyBigInt)
 
-			require.Nil(t, err)
-		})
-	} else {
-		t.Logf("Ignoring tests that require env variables: %s", err)
-	}
+		expectedAccount, err := account.NewAccount(
+			provider, accountAddr, publicKey, ks, 2,
+		)
+
+		require.NoError(t, err)
+		require.Equal(t, expectedAccount, &internalSigner.Account)
+		require.Equal(
+			t, validator.SepoliaValidationContracts(t), internalSigner.ValidationContracts(),
+		)
+
+		require.Nil(t, err)
+	})
 
 	t.Run("Error: cannot create validator account", func(t *testing.T) {
 		provider, providerErr := rpc.NewProvider("http://localhost:1234")
