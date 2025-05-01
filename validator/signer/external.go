@@ -1,4 +1,4 @@
-package validator
+package signer
 
 import (
 	"bytes"
@@ -18,26 +18,36 @@ import (
 	"github.com/NethermindEth/starknet.go/utils"
 )
 
+var _ Signer = (*ExternalSigner)(nil)
+
 // Used as a wrapper around an exgernal signer implementation
 type ExternalSigner struct {
 	*rpc.Provider
-	OperationalAddress Address
-	ChainId            felt.Felt
-	Url                string
+	operationalAddress  Address
+	chainId             felt.Felt
+	url                 string
+	validationContracts ValidationContracts
 }
 
-func NewExternalSigner(provider *rpc.Provider, signer *config.Signer) (ExternalSigner, error) {
-	chainID, err := provider.ChainID(context.Background())
+func NewExternalSigner(
+	provider *rpc.Provider,
+	signer *config.Signer,
+	addresses *config.ContractAddresses,
+) (ExternalSigner, error) {
+	chainIdStr, err := provider.ChainID(context.Background())
 	if err != nil {
 		return ExternalSigner{}, err
 	}
-	chainId := new(felt.Felt).SetBytes([]byte(chainID))
+	chainId := new(felt.Felt).SetBytes([]byte(chainIdStr))
+
+	validationContracts := types.ValidationContractsFromAddresses(addresses.SetDefaults(chainIdStr))
 
 	return ExternalSigner{
-		Provider:           provider,
-		OperationalAddress: types.AddressFromString(signer.OperationalAddress),
-		Url:                signer.ExternalUrl,
-		ChainId:            *chainId,
+		Provider:            provider,
+		operationalAddress:  types.AddressFromString(signer.OperationalAddress),
+		url:                 signer.ExternalUrl,
+		chainId:             *chainId,
+		validationContracts: validationContracts,
 	}, nil
 }
 
@@ -46,7 +56,7 @@ func (s *ExternalSigner) BuildAndSendInvokeTxn(
 	functionCalls []rpc.InvokeFunctionCall,
 	multiplier float64,
 ) (*rpc.AddInvokeTransactionResponse, error) {
-	nonce, err := s.Nonce(ctx, rpc.WithBlockTag("pending"), s.Address())
+	nonce, err := s.Nonce(ctx, rpc.WithBlockTag("pending"), s.Address().Felt())
 	if err != nil {
 		return nil, err
 	}
@@ -56,12 +66,12 @@ func (s *ExternalSigner) BuildAndSendInvokeTxn(
 
 	// Building and signing the txn, as it needs a signature to estimate the fee
 	broadcastInvokeTxnV3 := utils.BuildInvokeTxn(
-		s.Address(),
+		s.Address().Felt(),
 		nonce,
 		formattedCallData,
 		makeResourceBoundsMapWithZeroValues(),
 	)
-	if err := SignInvokeTx(&broadcastInvokeTxnV3.InvokeTxnV3, &s.ChainId, s.Url); err != nil {
+	if err := SignInvokeTx(&broadcastInvokeTxnV3.InvokeTxnV3, &s.chainId, s.url); err != nil {
 		return nil, err
 	}
 
@@ -80,15 +90,19 @@ func (s *ExternalSigner) BuildAndSendInvokeTxn(
 
 	// Signing the txn again with the estimated fee,
 	// as the fee value is used in the txn hash calculation
-	if err := SignInvokeTx(&broadcastInvokeTxnV3.InvokeTxnV3, &s.ChainId, s.Url); err != nil {
+	if err := SignInvokeTx(&broadcastInvokeTxnV3.InvokeTxnV3, &s.chainId, s.url); err != nil {
 		return nil, err
 	}
 
 	return s.AddInvokeTransaction(ctx, broadcastInvokeTxnV3)
 }
 
-func (s *ExternalSigner) Address() *felt.Felt {
-	return s.OperationalAddress.Felt()
+func (s *ExternalSigner) Address() *Address {
+	return &s.operationalAddress
+}
+
+func (s *ExternalSigner) ValidationContracts() *ValidationContracts {
+	return &s.validationContracts
 }
 
 func SignInvokeTx(invokeTxnV3 *rpc.InvokeTxnV3, chainId *felt.Felt, externalSignerUrl string) error {
@@ -134,4 +148,21 @@ func HashAndSignTx(invokeTxnV3 *rpc.InvokeTxnV3, chainId *felt.Felt, externalSig
 
 	var signResp signer.Response
 	return signResp, json.Unmarshal(body, &signResp)
+}
+
+func makeResourceBoundsMapWithZeroValues() rpc.ResourceBoundsMapping {
+	return rpc.ResourceBoundsMapping{
+		L1Gas: rpc.ResourceBounds{
+			MaxAmount:       "0x0",
+			MaxPricePerUnit: "0x0",
+		},
+		L1DataGas: rpc.ResourceBounds{
+			MaxAmount:       "0x0",
+			MaxPricePerUnit: "0x0",
+		},
+		L2Gas: rpc.ResourceBounds{
+			MaxAmount:       "0x0",
+			MaxPricePerUnit: "0x0",
+		},
+	}
 }
