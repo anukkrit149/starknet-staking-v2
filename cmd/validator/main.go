@@ -16,18 +16,19 @@ func NewCommand() cobra.Command {
 	var logLevelF string
 
 	var config configP.Config
+	var snConfig configP.StarknetConfig
 	var logger utils.ZapLogger
 
 	preRunE := func(cmd *cobra.Command, args []string) error {
 		// Config takes the values from flags directly,
 		// then fills the missing ones from the env vars
-		configFromEnv := configP.ConfigFromEnv()
+		configFromEnv := configP.FromEnv()
 		config.Fill(&configFromEnv)
 
 		// It fills the missing one from the ones defined
 		// in a config file
 		if configPath != "" {
-			configFromFile, err := configP.ConfigFromFile(configPath)
+			configFromFile, err := configP.FromFile(configPath)
 			if err != nil {
 				return err
 			}
@@ -52,7 +53,7 @@ func NewCommand() cobra.Command {
 	}
 
 	run := func(cmd *cobra.Command, args []string) {
-		if err := validator.Attest(&config, logger); err != nil {
+		if err := validator.Attest(&config, &snConfig, logger); err != nil {
 			logger.Error(err)
 		}
 	}
@@ -86,6 +87,36 @@ func NewCommand() cobra.Command {
 		"signer-op-address",
 		"",
 		"Signer operational address, required for attesting",
+	)
+	// Config starknet flags
+	cmd.Flags().StringVar(
+		&snConfig.ContractAddresses.Attest,
+		"attest-contract-address",
+		"",
+		"Staking contract address. Defaults values are provided for Sepolia and Mainnet",
+	)
+	cmd.Flags().StringVar(
+		&snConfig.ContractAddresses.Staking,
+		"staking-contract-address",
+		"",
+		"Staking contract address. Defaults values are provided for Sepolia and Mainnet",
+	)
+	cmd.Flags().Uint64Var(
+		&snConfig.AttestOptions.Fee,
+		"attest-fee",
+		0,
+		"Predefined fee to pay for each attest transaction."+
+			" If not provided, a call to estimate fee is done according to"+
+			"`estimate-attest-fee` flag value.",
+	)
+	cmd.Flags().StringVar(
+		&snConfig.AttestOptions.Recalculate,
+		"estimate-atttest-fee",
+		"once",
+		"When to perform an estimate fee call to know the cost of performing an attestation"+
+			" if no value is provided in the `attest-fee` flag. Options:\n"+
+			" - \"once\": attest fee is estimated once and succesive calls use that value.\n"+
+			" - \"always\": an estimate fee call is done before submitting each attestation.",
 	)
 
 	// Other flags

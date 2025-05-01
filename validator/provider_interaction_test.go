@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/NethermindEth/juno/utils"
+	"github.com/NethermindEth/starknet-staking-v2/validator"
 	main "github.com/NethermindEth/starknet-staking-v2/validator"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -37,7 +38,7 @@ func TestNewProvider(t *testing.T) {
 		require.ErrorContains(t, err, expectedErrorMsg)
 	})
 
-	envVars, err := loadEnv(t)
+	envVars, err := validator.LoadEnv(t)
 	loadedEnvVars := err == nil
 	if loadedEnvVars {
 		t.Run("Successful provider creation", func(t *testing.T) {
@@ -45,7 +46,7 @@ func TestNewProvider(t *testing.T) {
 				t.Skip(err)
 			}
 
-			provider, err := main.NewProvider(envVars.httpProviderUrl, logger)
+			provider, err := main.NewProvider(envVars.HttpProviderUrl, logger)
 
 			// Cannot deeply compare 2 providers (comparing channels does not works)
 			require.NotNil(t, provider)
@@ -75,10 +76,10 @@ func TestBlockHeaderSubscription(t *testing.T) {
 
 	// Cannot test error when subscribing to new block headers
 
-	envVars, err := loadEnv(t)
+	envVars, err := validator.LoadEnv(t)
 	if loadedEnvVars := err == nil; loadedEnvVars {
 		t.Run("Successfully subscribing to new block headers", func(t *testing.T) {
-			wsProvider, headerChannel, clientSubscription, err := main.SubscribeToBlockHeaders(envVars.wsProviderUrl, logger)
+			wsProvider, headerChannel, clientSubscription, err := main.SubscribeToBlockHeaders(envVars.WsProviderUrl, logger)
 
 			require.NotNil(t, wsProvider)
 			require.NotNil(t, headerChannel)

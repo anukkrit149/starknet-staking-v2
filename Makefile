@@ -23,7 +23,6 @@ test-cover: clean-testcache ## Run tests with coverage
 	go tool cover -html=coverage/coverage.out -o coverage/coverage.html
 	open coverage/coverage.html
 
-# Need to move mockgen interfaces to their own pkg
 generate: ## Generate mocks
 	mkdir -p mocks
 	go generate ./...

@@ -76,7 +76,7 @@ func TestNewCommand(t *testing.T) {
 	})
 
 	t.Run("Full command setup works with config file and with flags", func(t *testing.T) {
-		config, err := config.ConfigFromData([]byte(`{
+		config, err := config.FromData([]byte(`{
             "provider": {
                 "http": "http://localhost:1234"
             },
@@ -101,7 +101,7 @@ func TestNewCommand(t *testing.T) {
 	})
 	t.Run("Priority order is flags -> env vars -> config file", func(t *testing.T) {
 		// Configuration through file
-		config, err := config.ConfigFromData([]byte(`{
+		config, err := config.FromData([]byte(`{
             "provider": {
                 "http": "http://localhost:1234",
                 "ws": "ws://localhost:1235"

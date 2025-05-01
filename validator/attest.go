@@ -7,6 +7,7 @@ import (
 
 	"github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet-staking-v2/validator/config"
+	signerP "github.com/NethermindEth/starknet-staking-v2/validator/signer"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/cockroachdb/errors"
 	"github.com/sourcegraph/conc"
@@ -14,29 +15,35 @@ import (
 
 // Main execution loop of the program. Listens to the blockchain and sends
 // attest invoke when it's the right time
-func Attest(config *config.Config, logger utils.ZapLogger) error {
+func Attest(
+	config *config.Config, snConfig *config.StarknetConfig, logger utils.ZapLogger,
+) error {
 	provider, err := NewProvider(config.Provider.Http, &logger)
 	if err != nil {
 		return err
 	}
 
-	var signer Accounter
+	var signer signerP.Signer
 	if config.Signer.External() {
-		externalSigner, err := NewExternalSigner(provider, &config.Signer)
+		externalSigner, err := signerP.NewExternalSigner(
+			provider, &config.Signer, &snConfig.ContractAddresses,
+		)
 		if err != nil {
 			return err
 		}
 		signer = &externalSigner
 
 	} else {
-		internalSigner, err := NewInternalSigner(provider, &logger, &config.Signer)
+		internalSigner, err := signerP.NewInternalSigner(
+			provider, &logger, &config.Signer, &snConfig.ContractAddresses,
+		)
 		if err != nil {
 			return err
 		}
 		signer = &internalSigner
 	}
 
-	dispatcher := NewEventDispatcher[Accounter]()
+	dispatcher := NewEventDispatcher[signerP.Signer]()
 	wg := conc.NewWaitGroup()
 	wg.Go(func() { dispatcher.Dispatch(signer, &logger) })
 	defer wg.Wait()
@@ -45,7 +52,7 @@ func Attest(config *config.Config, logger utils.ZapLogger) error {
 	return RunBlockHeaderWatcher(config, &logger, signer, &dispatcher, wg)
 }
 
-func RunBlockHeaderWatcher[Account Accounter](
+func RunBlockHeaderWatcher[Account signerP.Signer](
 	config *config.Config,
 	logger *utils.ZapLogger,
 	signer Account,
@@ -84,7 +91,7 @@ func RunBlockHeaderWatcher[Account Accounter](
 	}
 }
 
-func ProcessBlockHeaders[Account Accounter](
+func ProcessBlockHeaders[Account signerP.Signer](
 	headersFeed chan *rpc.BlockHeader,
 	account Account,
 	logger *utils.ZapLogger,
@@ -146,7 +153,7 @@ func ProcessBlockHeaders[Account Accounter](
 	return nil
 }
 
-func SetTargetBlockHashIfExists[Account Accounter](
+func SetTargetBlockHashIfExists[Account signerP.Signer](
 	account Account,
 	logger *utils.ZapLogger,
 	attestInfo *AttestInfo,
@@ -168,33 +175,33 @@ func SetTargetBlockHashIfExists[Account Accounter](
 	}
 }
 
-func FetchEpochAndAttestInfoWithRetry[Account Accounter](
+func FetchEpochAndAttestInfoWithRetry[Account signerP.Signer](
 	account Account,
 	logger *utils.ZapLogger,
 	prevEpoch *EpochInfo,
 	isEpochSwitchCorrect func(prevEpoch *EpochInfo, newEpoch *EpochInfo) bool,
 	newEpochId string,
 ) (EpochInfo, AttestInfo, error) {
-	newEpoch, newAttestInfo, err := FetchEpochAndAttestInfo(account, logger)
+	newEpoch, newAttestInfo, err := signerP.FetchEpochAndAttestInfo(account, logger)
 
-	for i := 0; (err != nil || !isEpochSwitchCorrect(prevEpoch, &newEpoch)) && i < DEFAULT_MAX_RETRIES; i++ {
+	for err != nil || !isEpochSwitchCorrect(prevEpoch, &newEpoch) {
 		if err != nil {
 			logger.Debugw("Failed to fetch epoch info", "epoch id", newEpochId, "error", err.Error())
 		} else {
 			logger.Debugw("Wrong epoch switch", "from epoch", prevEpoch, "to epoch", &newEpoch)
 		}
-		logger.Debugw("Retrying to fetch epoch info...", "attempt", i+1)
+		logger.Debugw("Retrying to fetch epoch info...")
 		Sleep(time.Second)
-		newEpoch, newAttestInfo, err = FetchEpochAndAttestInfo(account, logger)
+		newEpoch, newAttestInfo, err = signerP.FetchEpochAndAttestInfo(account, logger)
 	}
 
-	if err != nil {
-		return EpochInfo{},
-			AttestInfo{},
-			errors.Errorf(
-				"Failed to fetch epoch info for epoch id %s: %s", newEpochId, err.Error(),
-			)
-	} else if !isEpochSwitchCorrect(prevEpoch, &newEpoch) {
+	// if err != nil {
+	// 	return EpochInfo{},
+	// 		AttestInfo{},
+	// 		errors.Errorf(
+	// 			"Failed to fetch epoch info for epoch id %s: %s", newEpochId, err.Error(),
+	// 		)
+	if !isEpochSwitchCorrect(prevEpoch, &newEpoch) {
 		return EpochInfo{},
 			AttestInfo{},
 			errors.Errorf("Wrong epoch switch: from epoch %s to epoch %s", prevEpoch, &newEpoch)

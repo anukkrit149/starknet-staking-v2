@@ -2,14 +2,17 @@ package validator_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/NethermindEth/juno/core/felt"
 	"github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet-staking-v2/mocks"
 	"github.com/NethermindEth/starknet-staking-v2/validator"
+	"github.com/NethermindEth/starknet-staking-v2/validator/config"
+	"github.com/NethermindEth/starknet-staking-v2/validator/constants"
+	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/NethermindEth/starknet.go/rpc"
+	"github.com/cockroachdb/errors"
 	"github.com/sourcegraph/conc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -19,25 +22,33 @@ func TestDispatch(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	t.Cleanup(mockCtrl.Finish)
 
-	mockAccount := mocks.NewMockAccounter(mockCtrl)
+	mockAccount := mocks.NewMockSigner(mockCtrl)
 	logger := utils.NewNopZapLogger()
+
+	contractAddresses := new(config.ContractAddresses).SetDefaults("sepolia")
+	validationContracts := types.ValidationContractsFromAddresses(contractAddresses)
 
 	t.Run("Simple scenario: only 1 attest that succeeds", func(t *testing.T) {
 		// Setup
-		dispatcher := validator.NewEventDispatcher[*mocks.MockAccounter]()
+		dispatcher := validator.NewEventDispatcher[*mocks.MockSigner]()
 		blockHashFelt := new(felt.Felt).SetUint64(1)
 
-		contractAddr := validator.AttestContract.Felt()
+		attestAddr := validationContracts.Attest.Felt()
 		calls := []rpc.InvokeFunctionCall{{
-			ContractAddress: contractAddr,
+			ContractAddress: attestAddr,
 			FunctionName:    "attest",
 			CallData:        []*felt.Felt{blockHashFelt},
 		}}
 		addTxHash := utils.HexToFelt(t, "0x123")
 		mockedAddTxResp := rpc.AddInvokeTransactionResponse{TransactionHash: addTxHash}
 		mockAccount.EXPECT().
-			BuildAndSendInvokeTxn(context.Background(), calls, validator.FEE_ESTIMATION_MULTIPLIER).
+			BuildAndSendInvokeTxn(
+				context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
+			).
 			Return(&mockedAddTxResp, nil)
+		mockAccount.EXPECT().ValidationContracts().Return(
+			validator.SepoliaValidationContracts(t),
+		).Times(1)
 
 		// Start routine
 		wg := &conc.WaitGroup{}
@@ -80,12 +91,12 @@ func TestDispatch(t *testing.T) {
 			// - an AttestRequired event A is emitted and ignored (as 1st one finished & succeeded)
 
 			// Setup
-			dispatcher := validator.NewEventDispatcher[*mocks.MockAccounter]()
+			dispatcher := validator.NewEventDispatcher[*mocks.MockSigner]()
 			blockHashFelt := new(felt.Felt).SetUint64(1)
 
-			contractAddr := validator.AttestContract.Felt()
+			attestAddr := validationContracts.Attest.Felt()
 			calls := []rpc.InvokeFunctionCall{{
-				ContractAddress: contractAddr,
+				ContractAddress: attestAddr,
 				FunctionName:    "attest",
 				CallData:        []*felt.Felt{blockHashFelt},
 			}}
@@ -94,10 +105,13 @@ func TestDispatch(t *testing.T) {
 			// We expect BuildAndSendInvokeTxn to be called only once (even though 3 events are sent)
 			mockAccount.EXPECT().
 				BuildAndSendInvokeTxn(
-					context.Background(), calls, validator.FEE_ESTIMATION_MULTIPLIER,
+					context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
 				).
 				Return(&mockedAddTxResp, nil).
 				Times(1)
+			mockAccount.EXPECT().ValidationContracts().Return(
+				validator.SepoliaValidationContracts(t),
+			).Times(1)
 
 			// Start routine
 			wg := &conc.WaitGroup{}
@@ -147,7 +161,8 @@ func TestDispatch(t *testing.T) {
 				Status:          validator.Successful,
 			}
 			require.Equal(t, expectedAttest, dispatcher.CurrentAttest)
-		})
+		},
+	)
 
 	t.Run("Same AttestRequired events are ignored until attestation fails", func(t *testing.T) {
 		// Sequence of actions:
@@ -156,12 +171,12 @@ func TestDispatch(t *testing.T) {
 		// - an AttestRequired event A is emitted and processed (as 1st one finished & failed)
 
 		// Setup
-		dispatcher := validator.NewEventDispatcher[*mocks.MockAccounter]()
+		dispatcher := validator.NewEventDispatcher[*mocks.MockSigner]()
 		blockHashFelt := new(felt.Felt).SetUint64(1)
 
-		contractAddr := validator.AttestContract.Felt()
+		attestAddr := validationContracts.Attest.Felt()
 		calls := []rpc.InvokeFunctionCall{{
-			ContractAddress: contractAddr,
+			ContractAddress: attestAddr,
 			FunctionName:    "attest",
 			CallData:        []*felt.Felt{blockHashFelt},
 		}}
@@ -170,9 +185,14 @@ func TestDispatch(t *testing.T) {
 
 		// We expect BuildAndSendInvokeTxn to be called only once (for the 2 first events)
 		mockAccount.EXPECT().
-			BuildAndSendInvokeTxn(context.Background(), calls, validator.FEE_ESTIMATION_MULTIPLIER).
+			BuildAndSendInvokeTxn(
+				context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
+			).
 			Return(&mockedAddTxResp1, nil).
 			Times(1)
+		mockAccount.EXPECT().ValidationContracts().Return(
+			validator.SepoliaValidationContracts(t),
+		).Times(1)
 
 		// Start routine
 		wg := &conc.WaitGroup{}
@@ -213,9 +233,14 @@ func TestDispatch(t *testing.T) {
 
 		// We expect a 2nd call to BuildAndSendInvokeTxn
 		mockAccount.EXPECT().
-			BuildAndSendInvokeTxn(context.Background(), calls, validator.FEE_ESTIMATION_MULTIPLIER).
+			BuildAndSendInvokeTxn(
+				context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
+			).
 			Return(&mockedAddTxResp2, nil).
 			Times(1)
+		mockAccount.EXPECT().ValidationContracts().Return(
+			validator.SepoliaValidationContracts(t),
+		).Times(1)
 
 		// This 3rd event does not get ignored as invoke attestation has failed
 		// Proof: a 2nd call to BuildAndSendInvokeTxn is asserted
@@ -233,7 +258,6 @@ func TestDispatch(t *testing.T) {
 		}
 		require.Equal(t, expectedAttest, dispatcher.CurrentAttest)
 	})
-
 	t.Run(
 		"Failed sending invoke tx also (just like TrackAttest) marks attest as failed",
 		func(t *testing.T) {
@@ -243,12 +267,12 @@ func TestDispatch(t *testing.T) {
 			// - an AttestRequired event A is emitted and ignored (as 2nd one succeeded)
 
 			// Setup
-			dispatcher := validator.NewEventDispatcher[*mocks.MockAccounter]()
+			dispatcher := validator.NewEventDispatcher[*mocks.MockSigner]()
 			blockHashFelt := new(felt.Felt).SetUint64(1)
 
-			contractAddr := validator.AttestContract.Felt()
+			attestAddr := validationContracts.Attest.Felt()
 			calls := []rpc.InvokeFunctionCall{{
-				ContractAddress: contractAddr,
+				ContractAddress: attestAddr,
 				FunctionName:    "attest",
 				CallData:        []*felt.Felt{blockHashFelt},
 			}}
@@ -256,10 +280,13 @@ func TestDispatch(t *testing.T) {
 			// We expect BuildAndSendInvokeTxn to fail once
 			mockAccount.EXPECT().
 				BuildAndSendInvokeTxn(
-					context.Background(), calls, validator.FEE_ESTIMATION_MULTIPLIER,
+					context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
 				).
 				Return(nil, errors.New("sending invoke tx failed for some reason")).
 				Times(1)
+			mockAccount.EXPECT().ValidationContracts().Return(
+				validator.SepoliaValidationContracts(t),
+			).Times(1)
 
 			// Start routine
 			wg := &conc.WaitGroup{}
@@ -279,7 +306,7 @@ func TestDispatch(t *testing.T) {
 			mockedAddTxResp := rpc.AddInvokeTransactionResponse{TransactionHash: addTxHash}
 			mockAccount.EXPECT().
 				BuildAndSendInvokeTxn(
-					context.Background(), calls, validator.FEE_ESTIMATION_MULTIPLIER,
+					context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
 				).
 				Return(&mockedAddTxResp, nil).
 				Times(1)
@@ -297,6 +324,9 @@ func TestDispatch(t *testing.T) {
 					ExecutionStatus: rpc.TxnExecutionStatusSUCCEEDED,
 				}, nil).
 				Times(1)
+			mockAccount.EXPECT().ValidationContracts().Return(
+				validator.SepoliaValidationContracts(t),
+			).Times(1)
 
 			dispatcher.AttestRequired <- validator.AttestRequired{BlockHash: blockHash}
 
@@ -321,13 +351,13 @@ func TestDispatch(t *testing.T) {
 		// - an EndOfWindow event for B is emitted and processed
 
 		// Setup
-		dispatcher := validator.NewEventDispatcher[*mocks.MockAccounter]()
+		dispatcher := validator.NewEventDispatcher[*mocks.MockSigner]()
 
 		// For event A
 		blockHashFeltA := new(felt.Felt).SetUint64(1)
-		contractAddr := validator.AttestContract.Felt()
+		attestAddr := validationContracts.Attest.Felt()
 		callsA := []rpc.InvokeFunctionCall{{
-			ContractAddress: contractAddr,
+			ContractAddress: attestAddr,
 			FunctionName:    "attest",
 			CallData:        []*felt.Felt{blockHashFeltA},
 		}}
@@ -336,7 +366,7 @@ func TestDispatch(t *testing.T) {
 
 		// We expect BuildAndSendInvokeTxn to be called once for event A
 		mockAccount.EXPECT().
-			BuildAndSendInvokeTxn(context.Background(), callsA, validator.FEE_ESTIMATION_MULTIPLIER).
+			BuildAndSendInvokeTxn(context.Background(), callsA, constants.FEE_ESTIMATION_MULTIPLIER).
 			Return(&mockedAddTxRespA, nil).
 			Times(1)
 
@@ -352,7 +382,7 @@ func TestDispatch(t *testing.T) {
 		// For event B
 		blockHashFeltB := new(felt.Felt).SetUint64(2)
 		callsB := []rpc.InvokeFunctionCall{{
-			ContractAddress: contractAddr,
+			ContractAddress: attestAddr,
 			FunctionName:    "attest",
 			CallData:        []*felt.Felt{blockHashFeltB},
 		}}
@@ -361,7 +391,9 @@ func TestDispatch(t *testing.T) {
 
 		// We expect BuildAndSendInvokeTxn to be called once for event B
 		mockAccount.EXPECT().
-			BuildAndSendInvokeTxn(context.Background(), callsB, validator.FEE_ESTIMATION_MULTIPLIER).
+			BuildAndSendInvokeTxn(
+				context.Background(), callsB, constants.FEE_ESTIMATION_MULTIPLIER,
+			).
 			Return(&mockedAddTxRespB, nil).
 			Times(1)
 
@@ -372,6 +404,10 @@ func TestDispatch(t *testing.T) {
 				FinalityStatus: rpc.TxnStatus_Rejected,
 			}, nil).
 			Times(1)
+
+		mockAccount.EXPECT().ValidationContracts().Return(
+			validator.SepoliaValidationContracts(t),
+		).Times(2)
 
 		// Start routine
 		wg := &conc.WaitGroup{}
@@ -409,7 +445,7 @@ func TestTrackAttest(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	t.Cleanup(mockCtrl.Finish)
 
-	mockAccount := mocks.NewMockAccounter(mockCtrl)
+	mockSigner := mocks.NewMockSigner(mockCtrl)
 	logger := utils.NewNopZapLogger()
 
 	t.Run("attestation fails if error is transaction status not found", func(t *testing.T) {
@@ -418,11 +454,11 @@ func TestTrackAttest(t *testing.T) {
 		blockHash := new(felt.Felt).SetUint64(1)
 		attestEvent := validator.AttestRequired{BlockHash: validator.BlockHash(*blockHash)}
 
-		mockAccount.EXPECT().
+		mockSigner.EXPECT().
 			GetTransactionStatus(context.Background(), txHash).
 			Return(nil, validator.ErrTxnHashNotFound)
 
-		txStatus := validator.TrackAttest(mockAccount, logger, &attestEvent, txHash)
+		txStatus := validator.TrackAttest(mockSigner, logger, &attestEvent, txHash)
 
 		require.Equal(t, validator.Ongoing, txStatus)
 	})
@@ -433,11 +469,11 @@ func TestTrackAttest(t *testing.T) {
 		blockHash := new(felt.Felt).SetUint64(1)
 		attestEvent := validator.AttestRequired{BlockHash: validator.BlockHash(*blockHash)}
 
-		mockAccount.EXPECT().
+		mockSigner.EXPECT().
 			GetTransactionStatus(context.Background(), txHash).
 			Return(nil, errors.New("some internal error"))
 
-		txStatus := validator.TrackAttest(mockAccount, logger, &attestEvent, txHash)
+		txStatus := validator.TrackAttest(mockSigner, logger, &attestEvent, txHash)
 
 		require.Equal(t, validator.Failed, txStatus)
 	})
@@ -448,13 +484,13 @@ func TestTrackAttest(t *testing.T) {
 		blockHash := new(felt.Felt).SetUint64(1)
 		attestEvent := validator.AttestRequired{BlockHash: validator.BlockHash(*blockHash)}
 
-		mockAccount.EXPECT().
+		mockSigner.EXPECT().
 			GetTransactionStatus(context.Background(), txHash).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus: rpc.TxnStatus_Rejected,
 			}, nil)
 
-		txStatus := validator.TrackAttest(mockAccount, logger, &attestEvent, txHash)
+		txStatus := validator.TrackAttest(mockSigner, logger, &attestEvent, txHash)
 
 		require.Equal(t, validator.Failed, txStatus)
 	})
@@ -466,7 +502,7 @@ func TestTrackAttest(t *testing.T) {
 		attestEvent := validator.AttestRequired{BlockHash: validator.BlockHash(*blockHash)}
 
 		revertError := "reverted for some reason"
-		mockAccount.EXPECT().
+		mockSigner.EXPECT().
 			GetTransactionStatus(context.Background(), txHash).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus:  rpc.TxnStatus_Accepted_On_L2,
@@ -474,7 +510,7 @@ func TestTrackAttest(t *testing.T) {
 				FailureReason:   revertError,
 			}, nil)
 
-		txStatus := validator.TrackAttest(mockAccount, logger, &attestEvent, txHash)
+		txStatus := validator.TrackAttest(mockSigner, logger, &attestEvent, txHash)
 
 		require.Equal(t, validator.Failed, txStatus)
 	})
@@ -485,14 +521,14 @@ func TestTrackAttest(t *testing.T) {
 		blockHash := new(felt.Felt).SetUint64(1)
 		attestEvent := validator.AttestRequired{BlockHash: validator.BlockHash(*blockHash)}
 
-		mockAccount.EXPECT().
+		mockSigner.EXPECT().
 			GetTransactionStatus(context.Background(), txHash).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus:  rpc.TxnStatus_Accepted_On_L2,
 				ExecutionStatus: rpc.TxnExecutionStatusSUCCEEDED,
 			}, nil)
 
-		txStatus := validator.TrackAttest(mockAccount, logger, &attestEvent, txHash)
+		txStatus := validator.TrackAttest(mockSigner, logger, &attestEvent, txHash)
 
 		require.Equal(t, validator.Successful, txStatus)
 	})

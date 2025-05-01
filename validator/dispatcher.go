@@ -7,6 +7,7 @@ import (
 
 	"github.com/NethermindEth/juno/core/felt"
 	"github.com/NethermindEth/juno/utils"
+	signerP "github.com/NethermindEth/starknet-staking-v2/validator/signer"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/sourcegraph/conc"
 )
@@ -62,7 +63,7 @@ func (a *AttestTracker) resetTransactionHash() {
 	a.TransactionHash = felt.Zero
 }
 
-type EventDispatcher[Account Accounter] struct {
+type EventDispatcher[S signerP.Signer] struct {
 	// Current epoch attest-related fields
 	CurrentAttest AttestTracker
 	// Event channels
@@ -70,16 +71,16 @@ type EventDispatcher[Account Accounter] struct {
 	EndOfWindow    chan struct{}
 }
 
-func NewEventDispatcher[Account Accounter]() EventDispatcher[Account] {
-	return EventDispatcher[Account]{
+func NewEventDispatcher[S signerP.Signer]() EventDispatcher[S] {
+	return EventDispatcher[S]{
 		CurrentAttest:  NewAttestTracker(),
 		AttestRequired: make(chan AttestRequired),
 		EndOfWindow:    make(chan struct{}),
 	}
 }
 
-func (d *EventDispatcher[Account]) Dispatch(
-	account Account,
+func (d *EventDispatcher[S]) Dispatch(
+	signer S,
 	logger *utils.ZapLogger,
 ) {
 	wg := conc.NewWaitGroup()
@@ -95,7 +96,7 @@ func (d *EventDispatcher[Account]) Dispatch(
 			if event == d.CurrentAttest.Event &&
 				d.CurrentAttest.Status != Successful &&
 				d.CurrentAttest.TransactionHash != felt.Zero {
-				setAttestStatusOnTracking(account, logger, &d.CurrentAttest)
+				setAttestStatusOnTracking(signer, logger, &d.CurrentAttest)
 			}
 
 			if event == d.CurrentAttest.Event &&
@@ -107,7 +108,7 @@ func (d *EventDispatcher[Account]) Dispatch(
 			d.CurrentAttest.setOngoing()
 
 			logger.Infow("Invoking attest", "block hash", event.BlockHash.String())
-			resp, err := InvokeAttest(account, &event)
+			resp, err := signerP.InvokeAttest(signer, &event)
 			if err != nil {
 				logger.Errorw(
 					"Failed to attest", "block hash", event.BlockHash.String(), "error", err,
@@ -122,7 +123,7 @@ func (d *EventDispatcher[Account]) Dispatch(
 			logger.Infow("End of window reached")
 
 			if d.CurrentAttest.Status != Successful {
-				setAttestStatusOnTracking(account, logger, &d.CurrentAttest)
+				setAttestStatusOnTracking(signer, logger, &d.CurrentAttest)
 			}
 
 			if d.CurrentAttest.Status == Successful {
@@ -131,7 +132,7 @@ func (d *EventDispatcher[Account]) Dispatch(
 					"target block hash", d.CurrentAttest.Event.BlockHash.String(),
 				)
 			} else {
-				logger.Infow(
+				logger.Warnw(
 					"Failed to attest to target block",
 					"target block hash", d.CurrentAttest.Event.BlockHash.String(),
 				)
@@ -140,12 +141,13 @@ func (d *EventDispatcher[Account]) Dispatch(
 	}
 }
 
-func setAttestStatusOnTracking[Account Accounter](
-	account Account,
+func setAttestStatusOnTracking[S signerP.Signer](
+	signer S,
 	logger *utils.ZapLogger,
 	attestToTrack *AttestTracker,
 ) {
-	status := TrackAttest(account, logger, &attestToTrack.Event, &attestToTrack.TransactionHash)
+	status := TrackAttest(signer, logger, &attestToTrack.Event, &attestToTrack.TransactionHash)
+	attestToTrack.Status = status
 	switch status {
 	case Ongoing:
 		attestToTrack.setOngoing()
@@ -158,13 +160,13 @@ func setAttestStatusOnTracking[Account Accounter](
 	}
 }
 
-func TrackAttest[Account Accounter](
-	account Account,
+func TrackAttest[S signerP.Signer](
+	signer S,
 	logger *utils.ZapLogger,
 	event *AttestRequired,
 	txHash *felt.Felt,
 ) AttestStatus {
-	txStatus, err := account.GetTransactionStatus(context.Background(), txHash)
+	txStatus, err := signer.GetTransactionStatus(context.Background(), txHash)
 
 	if err != nil {
 		if err.Error() == ErrTxnHashNotFound.Error() {
