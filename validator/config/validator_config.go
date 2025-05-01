@@ -6,12 +6,6 @@ import (
 	"os"
 )
 
-type Starknet struct {
-	StakingContract string `json:"stakingContractAddress"`
-	AttestContract  string `json:"attestContractAddress"`
-	AttestFee       string `json:"attestFee"`
-}
-
 type Provider struct {
 	Http string `json:"http"`
 	Ws   string `json:"ws"`
@@ -93,7 +87,7 @@ type Config struct {
 	Signer   Signer   `json:"signer"`
 }
 
-func ConfigFromEnv() Config {
+func FromEnv() Config {
 	return Config{
 		Provider: ProviderFromEnv(),
 		Signer:   SignerFromEnv(),
@@ -101,15 +95,15 @@ func ConfigFromEnv() Config {
 }
 
 // Function to load and parse the JSON file
-func ConfigFromFile(filePath string) (Config, error) {
+func FromFile(filePath string) (Config, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return Config{}, err
 	}
-	return ConfigFromData(data)
+	return FromData(data)
 }
 
-func ConfigFromData(data []byte) (Config, error) {
+func FromData(data []byte) (Config, error) {
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
 		return Config{}, err

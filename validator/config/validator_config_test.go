@@ -10,7 +10,7 @@ import (
 
 func TestConfigFromFile(t *testing.T) {
 	t.Run("Error when reading from file", func(t *testing.T) {
-		config, err := ConfigFromFile("some non existing file name hopefully")
+		config, err := FromFile("some non existing file name hopefully")
 
 		require.Equal(t, Config{}, config)
 		require.ErrorIs(t, err, os.ErrNotExist)
@@ -33,7 +33,7 @@ func TestConfigFromFile(t *testing.T) {
 		}
 		require.NoError(t, tmpFile.Close())
 
-		config, err := ConfigFromFile(tmpFile.Name())
+		config, err := FromFile(tmpFile.Name())
 
 		require.Equal(t, Config{}, config)
 		require.NotNil(t, err)
@@ -51,7 +51,7 @@ func TestConfigFromFile(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := ConfigFromData(data)
+		config, err := FromData(data)
 		require.NoError(t, err)
 		require.NoError(t, config.Check())
 
@@ -109,7 +109,7 @@ func TestConfigFromEnv(t *testing.T) {
 	)
 
 	// Test Config
-	config := ConfigFromEnv()
+	config := FromEnv()
 	expectedConfig := Config{
 		Provider: expectedProvider,
 		Signer:   expectedSigner,
@@ -129,7 +129,7 @@ func TestCorrectConfig(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := ConfigFromData(data)
+		config, err := FromData(data)
 		require.NoError(t, err)
 		require.ErrorContains(t, config.Check(), "http provider url")
 	})
@@ -145,7 +145,7 @@ func TestCorrectConfig(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := ConfigFromData(data)
+		config, err := FromData(data)
 		require.NoError(t, err)
 		require.ErrorContains(t, config.Check(), "ws provider url")
 	})
@@ -161,7 +161,7 @@ func TestCorrectConfig(t *testing.T) {
                 "privateKey": "0x123"
             }
         }`)
-		config, err := ConfigFromData(data)
+		config, err := FromData(data)
 		require.NoError(t, err)
 		require.ErrorContains(t, config.Check(), "operational address")
 	})
@@ -177,7 +177,7 @@ func TestCorrectConfig(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := ConfigFromData(data)
+		config, err := FromData(data)
 		require.NoError(t, err)
 		require.NoError(t, config.Check())
 		require.False(t, config.Signer.External())
@@ -194,7 +194,7 @@ func TestCorrectConfig(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := ConfigFromData(data)
+		config, err := FromData(data)
 		require.NoError(t, err)
 		require.NoError(t, config.Check())
 		require.True(t, config.Signer.External())
@@ -210,7 +210,7 @@ func TestCorrectConfig(t *testing.T) {
                 "operationalAddress": "0x456"
             }
         }`)
-		config, err := ConfigFromData(data)
+		config, err := FromData(data)
 		require.NoError(t, err)
 		require.ErrorContains(t, config.Check(), "private key")
 	})
@@ -218,7 +218,7 @@ func TestCorrectConfig(t *testing.T) {
 
 func TestConfigFill(t *testing.T) {
 	// Test data
-	config1, err := ConfigFromData(
+	config1, err := FromData(
 		[]byte(`{
             "provider": {
                 "http": "http://localhost:1234"
@@ -230,7 +230,7 @@ func TestConfigFill(t *testing.T) {
         }`),
 	)
 	require.NoError(t, err)
-	config2, err := ConfigFromData([]byte(`{
+	config2, err := FromData([]byte(`{
             "provider": {
                 "http": "http://localhost:9999",
                 "ws": "ws://localhost:1235"
@@ -244,7 +244,7 @@ func TestConfigFill(t *testing.T) {
 	require.NoError(t, err)
 
 	// Expected values
-	expectedConfig1, err := ConfigFromData(
+	expectedConfig1, err := FromData(
 		[]byte(`{
             "provider": {
                 "http": "http://localhost:1234",
