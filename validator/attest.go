@@ -65,7 +65,9 @@ func RunBlockHeaderWatcher[Account signerP.Signer](
 	}
 
 	for {
-		wsProvider, headersFeed, clientSubscription, err := SubscribeToBlockHeaders(config.Provider.Ws, logger)
+		wsProvider, headersFeed, clientSubscription, err := SubscribeToBlockHeaders(
+			config.Provider.Ws, logger,
+		)
 		if err != nil {
 			return err
 		}
@@ -198,8 +200,8 @@ func FetchEpochAndAttestInfoWithRetry[Account signerP.Signer](
 	// if err != nil {
 	// 	return EpochInfo{},
 	// 		AttestInfo{},
-	// 		errors.Errorf(
-	// 			"Failed to fetch epoch info for epoch id %s: %s", newEpochId, err.Error(),
+	// 		errors.Errorw(
+	// 			"Failed to fetch epoch info",  epoch id %s: %s", newEpochId, "error", err.Error(),
 	// 		)
 	if !isEpochSwitchCorrect(prevEpoch, &newEpoch) {
 		return EpochInfo{},

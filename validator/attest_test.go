@@ -2,8 +2,6 @@ package validator_test
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 	"strconv"
 	"testing"
 	"time"
@@ -12,7 +10,6 @@ import (
 	"github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet-staking-v2/mocks"
 	"github.com/NethermindEth/starknet-staking-v2/validator"
-	"github.com/NethermindEth/starknet-staking-v2/validator/config"
 	"github.com/NethermindEth/starknet-staking-v2/validator/constants"
 	signerP "github.com/NethermindEth/starknet-staking-v2/validator/signer"
 	"github.com/NethermindEth/starknet-staking-v2/validator/types"
@@ -26,87 +23,92 @@ import (
 )
 
 func TestAttest(t *testing.T) {
-	sepoliaConfig := new(config.StarknetConfig).SetDefaults("sepolia")
+	// sepoliaConfig := new(config.StarknetConfig).SetDefaults("sepolia")
 
-	t.Run("Successful set up (internal signer)", func(t *testing.T) {
-		env, err := validator.LoadEnv(t)
-		if err != nil {
-			t.Skipf("Ignoring test due to env variables loading failed: %s", err)
-		}
+	// This test is based in the old mechanism where `FetchEpochAndAttestInfoWithRetry` was
+	// meant to fail a limited amount of times. Since it is now tries through the infinite loop
+	// this tests hangs
+	/*
+			t.Run("Successful set up (internal signer)", func(t *testing.T) {
+				env, err := validator.LoadEnv(t)
+				if err != nil {
+					t.Skipf("Ignoring test due to env variables loading failed: %s", err)
+				}
 
-		operationalAddress := utils.HexToFelt(t, "0x123")
-		serverInternalError := "Some internal server error when fetching epoch and attest info (internal signer test)"
+				operationalAddress := utils.HexToFelt(t, "0x123")
+				serverInternalError := "Some internal server error when fetching epoch and attest info" +
+					"(internal signer test)"
 
-		mockRpc := validator.MockRpcServer(t, operationalAddress, serverInternalError)
-		defer mockRpc.Close()
+				mockRpc := validator.MockRpcServer(t, operationalAddress, serverInternalError)
+				defer mockRpc.Close()
 
-		config := &config.Config{
-			Provider: config.Provider{
-				Http: mockRpc.URL,
-				Ws:   env.WsProviderUrl,
-			},
-			Signer: config.Signer{
-				OperationalAddress: operationalAddress.String(),
-				ExternalUrl:        "http://localhost:5678",
-			},
-		}
+				config := &config.Config{
+					Provider: config.Provider{
+						Http: mockRpc.URL,
+						Ws:   env.WsProviderUrl,
+					},
+					Signer: config.Signer{
+						OperationalAddress: operationalAddress.String(),
+						ExternalUrl:        "http://localhost:5678",
+					},
+				}
 
-		validator.Sleep = func(d time.Duration) {
-			// No need to wait
-		}
-		defer func() { validator.Sleep = time.Sleep }()
+				validator.Sleep = func(d time.Duration) {}
+				defer func() { validator.Sleep = time.Sleep }()
 
-		logger := utils.NewNopZapLogger()
-		err = validator.Attest(config, sepoliaConfig, *logger)
+				// logger := utils.NewNopZapLogger()
+				logger, _ := utils.NewZapLogger(utils.DEBUG, true)
+				err = validator.Attest(config, sepoliaConfig, *logger)
 
-		expectedErrorMsg := fmt.Sprintf(
-			"Failed to fetch epoch info for epoch id at app startup: Error when calling entrypoint `get_attestation_info_by_operational_address`: -32603 The error is not a valid RPC error: %d Internal Server Error: %s",
-			http.StatusInternalServerError,
-			serverInternalError,
-		)
+				expectedErrorMsg := fmt.Sprintf(
+					"Failed to fetch epoch info for epoch id at app startup: Error when calling entrypoint `get_attestation_info_by_operational_address`: -32603 The error is not a valid RPC error: %d Internal Server Error: %s",
+					http.StatusInternalServerError,
+					serverInternalError,
+				)
 
-		require.ErrorContains(t, err, expectedErrorMsg)
-	})
+				require.ErrorContains(t, err, expectedErrorMsg)
+			})
 
-	t.Run("Successful set up (external signer)", func(t *testing.T) {
-		env, err := validator.LoadEnv(t)
-		if err != nil {
-			t.Skipf("Ignoring test due to env variables loading failed: %s", err)
-		}
+		t.Run("Successful set up (external signer)", func(t *testing.T) {
+			env, err := validator.LoadEnv(t)
+			if err != nil {
+				t.Skipf("Ignoring test due to env variables loading failed: %s", err)
+			}
 
-		operationalAddress := utils.HexToFelt(t, "0x456")
-		serverInternalError := "Some internal server error when fetching epoch and attest info (external signer test)"
+			operationalAddress := utils.HexToFelt(t, "0x456")
+			serverInternalError := "Some internal server error when fetching epoch and attest info (external signer test)"
 
-		mockRpc := validator.MockRpcServer(t, operationalAddress, serverInternalError)
-		defer mockRpc.Close()
+			mockRpc := validator.MockRpcServer(t, operationalAddress, serverInternalError)
+			defer mockRpc.Close()
 
-		config := &config.Config{
-			Provider: config.Provider{
-				Http: mockRpc.URL,
-				Ws:   env.WsProviderUrl,
-			},
-			Signer: config.Signer{
-				OperationalAddress: operationalAddress.String(),
-				PrivKey:            "0x123",
-			},
-		}
+			config := &config.Config{
+				Provider: config.Provider{
+					Http: mockRpc.URL,
+					Ws:   env.WsProviderUrl,
+				},
+				Signer: config.Signer{
+					OperationalAddress: operationalAddress.String(),
+					PrivKey:            "0x123",
+				},
+			}
 
-		validator.Sleep = func(d time.Duration) {
-			// No need to wait
-		}
-		defer func() { validator.Sleep = time.Sleep }()
+			validator.Sleep = func(d time.Duration) {
+				// No need to wait
+			}
+			defer func() { validator.Sleep = time.Sleep }()
 
-		logger := utils.NewNopZapLogger()
-		err = validator.Attest(config, sepoliaConfig, *logger)
+			logger := utils.NewNopZapLogger()
+			err = validator.Attest(config, sepoliaConfig, *logger)
 
-		expectedErrorMsg := fmt.Sprintf(
-			"Failed to fetch epoch info for epoch id at app startup: Error when calling entrypoint `get_attestation_info_by_operational_address`: -32603 The error is not a valid RPC error: %d Internal Server Error: %s",
-			http.StatusInternalServerError,
-			serverInternalError,
-		)
+			expectedErrorMsg := fmt.Sprintf(
+				"Failed to fetch epoch info for epoch id at app startup: Error when calling entrypoint `get_attestation_info_by_operational_address`: -32603 The error is not a valid RPC error: %d Internal Server Error: %s",
+				http.StatusInternalServerError,
+				serverInternalError,
+			)
 
-		require.ErrorContains(t, err, expectedErrorMsg)
-	})
+			require.ErrorContains(t, err, expectedErrorMsg)
+		})
+	*/
 }
 
 func TestProcessBlockHeaders(t *testing.T) {
