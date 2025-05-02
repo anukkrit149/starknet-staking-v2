@@ -8,6 +8,7 @@ import (
 	"github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet-staking-v2/validator/config"
 	signerP "github.com/NethermindEth/starknet-staking-v2/validator/signer"
+	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/cockroachdb/errors"
 	"github.com/sourcegraph/conc"
@@ -16,7 +17,10 @@ import (
 // Main execution loop of the program. Listens to the blockchain and sends
 // attest invoke when it's the right time
 func Attest(
-	config *config.Config, snConfig *config.StarknetConfig, logger utils.ZapLogger,
+	config *config.Config,
+	snConfig *config.StarknetConfig,
+	maxRetries types.Retries,
+	logger utils.ZapLogger,
 ) error {
 	provider, err := NewProvider(config.Provider.Http, &logger)
 	if err != nil {
@@ -26,7 +30,7 @@ func Attest(
 	var signer signerP.Signer
 	if config.Signer.External() {
 		externalSigner, err := signerP.NewExternalSigner(
-			provider, &config.Signer, &snConfig.ContractAddresses,
+			provider, &logger, &config.Signer, &snConfig.ContractAddresses,
 		)
 		if err != nil {
 			return err
@@ -49,7 +53,7 @@ func Attest(
 	defer wg.Wait()
 	defer close(dispatcher.AttestRequired)
 
-	return RunBlockHeaderWatcher(config, &logger, signer, &dispatcher, wg)
+	return RunBlockHeaderWatcher(config, &logger, signer, &dispatcher, maxRetries, wg)
 }
 
 func RunBlockHeaderWatcher[Account signerP.Signer](
@@ -57,6 +61,7 @@ func RunBlockHeaderWatcher[Account signerP.Signer](
 	logger *utils.ZapLogger,
 	signer Account,
 	dispatcher *EventDispatcher[Account],
+	maxRetries types.Retries,
 	wg *conc.WaitGroup,
 ) error {
 	cleanUp := func(wsProvider *rpc.WsProvider, headersFeed chan *rpc.BlockHeader) {
@@ -75,7 +80,7 @@ func RunBlockHeaderWatcher[Account signerP.Signer](
 		stopProcessingHeaders := make(chan error)
 
 		wg.Go(func() {
-			err := ProcessBlockHeaders(headersFeed, signer, logger, dispatcher)
+			err := ProcessBlockHeaders(headersFeed, signer, logger, dispatcher, maxRetries)
 			if err != nil {
 				stopProcessingHeaders <- err
 			}
@@ -83,7 +88,7 @@ func RunBlockHeaderWatcher[Account signerP.Signer](
 
 		select {
 		case err := <-clientSubscription.Err():
-			logger.Errorw("Error in block header subscription", "error", err)
+			logger.Errorw("Block header subscription", "error", err)
 			logger.Debugw("Ending headers subscription, closing websocket connection, and retrying...")
 			cleanUp(wsProvider, headersFeed)
 		case err := <-stopProcessingHeaders:
@@ -98,10 +103,11 @@ func ProcessBlockHeaders[Account signerP.Signer](
 	account Account,
 	logger *utils.ZapLogger,
 	dispatcher *EventDispatcher[Account],
+	maxRetries types.Retries,
 ) error {
 	noEpochSwitch := func(*EpochInfo, *EpochInfo) bool { return true }
 	epochInfo, attestInfo, err := FetchEpochAndAttestInfoWithRetry(
-		account, logger, nil, noEpochSwitch, "at app startup",
+		account, logger, nil, noEpochSwitch, maxRetries, "at app startup",
 	)
 	if err != nil {
 		return err
@@ -120,6 +126,7 @@ func ProcessBlockHeaders[Account signerP.Signer](
 				logger,
 				&prevEpochInfo,
 				CorrectEpochSwitch,
+				maxRetries,
 				strconv.FormatUint(prevEpochInfo.EpochId+1, 10),
 			)
 			if err != nil {
@@ -182,31 +189,46 @@ func FetchEpochAndAttestInfoWithRetry[Account signerP.Signer](
 	logger *utils.ZapLogger,
 	prevEpoch *EpochInfo,
 	isEpochSwitchCorrect func(prevEpoch *EpochInfo, newEpoch *EpochInfo) bool,
+	maxRetries types.Retries,
 	newEpochId string,
 ) (EpochInfo, AttestInfo, error) {
+	// storing the initial value for error reporting
+	totalRetryAmount := maxRetries.String()
+
 	newEpoch, newAttestInfo, err := signerP.FetchEpochAndAttestInfo(account, logger)
 
-	for err != nil || !isEpochSwitchCorrect(prevEpoch, &newEpoch) {
+	for (err != nil || !isEpochSwitchCorrect(prevEpoch, &newEpoch)) && !maxRetries.IsZero() {
 		if err != nil {
 			logger.Debugw("Failed to fetch epoch info", "epoch id", newEpochId, "error", err.Error())
 		} else {
 			logger.Debugw("Wrong epoch switch", "from epoch", prevEpoch, "to epoch", &newEpoch)
 		}
-		logger.Debugw("Retrying to fetch epoch info...")
+		logger.Debugf("Retrying to fetch epoch info: %s retries remaining", &maxRetries)
+
 		Sleep(time.Second)
+
 		newEpoch, newAttestInfo, err = signerP.FetchEpochAndAttestInfo(account, logger)
+		maxRetries.Sub()
 	}
 
-	// if err != nil {
-	// 	return EpochInfo{},
-	// 		AttestInfo{},
-	// 		errors.Errorw(
-	// 			"Failed to fetch epoch info",  epoch id %s: %s", newEpochId, "error", err.Error(),
-	// 		)
+	if err != nil {
+		return EpochInfo{},
+			AttestInfo{},
+			errors.Errorf(
+				"Failed to fetch epoch info after %s retries. Epoch id: %s. Error: %s",
+				totalRetryAmount,
+				newEpochId,
+				err.Error(),
+			)
+	}
 	if !isEpochSwitchCorrect(prevEpoch, &newEpoch) {
 		return EpochInfo{},
 			AttestInfo{},
-			errors.Errorf("Wrong epoch switch: from epoch %s to epoch %s", prevEpoch, &newEpoch)
+			errors.Errorf("Wrong epoch switch after %s retries from epoch:\n%s\nTo epoch:\n%s",
+				totalRetryAmount,
+				prevEpoch.String(),
+				newEpoch.String(),
+			)
 	}
 
 	return newEpoch, newAttestInfo, nil

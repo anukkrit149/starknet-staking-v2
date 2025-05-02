@@ -28,7 +28,10 @@ func NewProvider[Logger utils.Logger](providerUrl string, logger Logger) (*rpc.P
 
 // Returns a Go channel where BlockHeaders are received
 func SubscribeToBlockHeaders[Logger utils.Logger](wsProviderUrl string, logger Logger) (
-	*rpc.WsProvider, chan *rpc.BlockHeader, *client.ClientSubscription, error,
+	*rpc.WsProvider,
+	chan *rpc.BlockHeader,
+	*client.ClientSubscription,
+	error,
 ) {
 	logger.Debugw("Initializing websocket connection", "wsProviderUrl", wsProviderUrl)
 	// This needs a timeout or something

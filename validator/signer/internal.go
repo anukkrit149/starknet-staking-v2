@@ -21,9 +21,9 @@ type InternalSigner struct {
 	validationContracts ValidationContracts
 }
 
-func NewInternalSigner[Logger junoUtils.Logger](
+func NewInternalSigner(
 	provider *rpc.Provider,
-	logger Logger,
+	logger *junoUtils.ZapLogger,
 	signer *config.Signer,
 	addresses *config.ContractAddresses,
 ) (InternalSigner, error) {
@@ -51,7 +51,10 @@ func NewInternalSigner[Logger junoUtils.Logger](
 	if err != nil {
 		return InternalSigner{}, err
 	}
-	validationContracts := types.ValidationContractsFromAddresses(addresses.SetDefaults(chainIdStr))
+	validationContracts := types.ValidationContractsFromAddresses(
+		addresses.SetDefaults(chainIdStr),
+	)
+	logger.Debugw("validation contracts: %s", validationContracts.String())
 
 	logger.Debugw("Validator account has been set up", "address", accountAddr.String())
 	return InternalSigner{

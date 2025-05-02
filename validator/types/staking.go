@@ -2,6 +2,7 @@ package types
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/NethermindEth/starknet-staking-v2/validator/config"
 	"lukechampine.com/uint128"
@@ -58,4 +59,14 @@ func ValidationContractsFromAddresses(ca *config.ContractAddresses) ValidationCo
 		Attest:  AddressFromString(ca.Attest),
 		Staking: AddressFromString(ca.Staking),
 	}
+}
+
+func (c *ValidationContracts) String() string {
+	return fmt.Sprintf(`{
+        Staking contract address: %s,
+        Attestation contract address: %s,
+    }`,
+		c.Staking.String(),
+		c.Attest.String(),
+	)
 }

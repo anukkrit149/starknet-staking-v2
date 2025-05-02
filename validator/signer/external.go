@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/NethermindEth/juno/core/felt"
+	junoUtils "github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet-staking-v2/signer"
 	"github.com/NethermindEth/starknet-staking-v2/validator/config"
 	"github.com/NethermindEth/starknet-staking-v2/validator/types"
@@ -31,6 +32,7 @@ type ExternalSigner struct {
 
 func NewExternalSigner(
 	provider *rpc.Provider,
+	logger *junoUtils.ZapLogger,
 	signer *config.Signer,
 	addresses *config.ContractAddresses,
 ) (ExternalSigner, error) {
@@ -40,7 +42,9 @@ func NewExternalSigner(
 	}
 	chainId := new(felt.Felt).SetBytes([]byte(chainIdStr))
 
+	println(chainIdStr)
 	validationContracts := types.ValidationContractsFromAddresses(addresses.SetDefaults(chainIdStr))
+	logger.Debugf("validation contracts: %s", validationContracts.String())
 
 	return ExternalSigner{
 		Provider:            provider,

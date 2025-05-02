@@ -30,9 +30,9 @@ var defaults = [2]ContractAddresses{
 }
 
 func chainIdFromStr(s string) chainId {
-	if s == "mainnet" {
+	if s == "SN_MAINNET" {
 		return mainnet
-	} else if s == "sepolia" {
+	} else if s == "SN_SEPOLIA" {
 		return sepolia
 	}
 	return unknown
@@ -44,11 +44,6 @@ type ContractAddresses struct {
 }
 
 func (ca *ContractAddresses) SetDefaults(chainIdStr string) *ContractAddresses {
-	// chainIdStr, err := provider.ChainID(context.Background())
-	// if err != nil {
-	// 	return err
-	// }
-
 	chainId := chainIdFromStr(chainIdStr)
 	if chainId == unknown {
 		return ca
@@ -73,6 +68,16 @@ func (ca *ContractAddresses) Check() error {
 		return errors.New("attest contract address is not set")
 	}
 	return nil
+}
+
+func (ca *ContractAddresses) String() string {
+	return fmt.Sprintf(`{
+        staking contract address: %s,
+        attestation contract address: %s,
+    }`,
+		ca.Staking,
+		ca.Attest,
+	)
 }
 
 type recalculate int

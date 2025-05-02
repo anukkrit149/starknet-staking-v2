@@ -8,14 +8,17 @@ import (
 	"github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet-staking-v2/validator"
 	configP "github.com/NethermindEth/starknet-staking-v2/validator/config"
+	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/spf13/cobra"
 )
 
 func NewCommand() cobra.Command {
 	var configPath string
 	var logLevelF string
+	var maxRetriesF string
 
 	var config configP.Config
+	var maxRetries types.Retries
 	var snConfig configP.StarknetConfig
 	var logger utils.ZapLogger
 
@@ -34,10 +37,15 @@ func NewCommand() cobra.Command {
 			}
 			config.Fill(&configFromFile)
 		}
-
 		if err := config.Check(); err != nil {
 			return err
 		}
+
+		parsedRetries, err := types.RetriesFromString(maxRetriesF)
+		if err != nil {
+			return err
+		}
+		maxRetries = parsedRetries
 
 		var logLevel utils.LogLevel
 		if err := logLevel.Set(logLevelF); err != nil {
@@ -53,7 +61,7 @@ func NewCommand() cobra.Command {
 	}
 
 	run := func(cmd *cobra.Command, args []string) {
-		if err := validator.Attest(&config, &snConfig, logger); err != nil {
+		if err := validator.Attest(&config, &snConfig, maxRetries, logger); err != nil {
 			logger.Error(err)
 		}
 	}
@@ -72,6 +80,7 @@ func NewCommand() cobra.Command {
 	// Config provider flags
 	cmd.Flags().StringVar(&config.Provider.Http, "provider-http", "", "Provider http address")
 	cmd.Flags().StringVar(&config.Provider.Ws, "provider-ws", "", "Provider ws address")
+
 	// Config signer flags
 	cmd.Flags().StringVar(
 		&config.Signer.ExternalUrl,
@@ -88,6 +97,7 @@ func NewCommand() cobra.Command {
 		"",
 		"Signer operational address, required for attesting",
 	)
+
 	// Config starknet flags
 	cmd.Flags().StringVar(
 		&snConfig.ContractAddresses.Attest,
@@ -118,8 +128,14 @@ func NewCommand() cobra.Command {
 			" - \"once\": attest fee is estimated once and succesive calls use that value.\n"+
 			" - \"always\": an estimate fee call is done before submitting each attestation.",
 	)
-
 	// Other flags
+	cmd.Flags().StringVar(
+		&maxRetriesF,
+		"max-retries",
+		"10",
+		"How many times to retry to get information required for attestation."+
+			" It can be either a positive integer or the key word 'infinite'",
+	)
 	cmd.Flags().StringVar(
 		&logLevelF, "log-level", utils.INFO.String(), "Options: trace, debug, info, warn, error.",
 	)
