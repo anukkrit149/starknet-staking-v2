@@ -117,14 +117,14 @@ func NewCommand() cobra.Command {
 		0,
 		"Predefined fee to pay for each attest transaction."+
 			" If not provided, a call to estimate fee is done according to"+
-			"`estimate-attest-fee` flag value.",
+			" 'estimate-attest-fee' flag value.",
 	)
 	cmd.Flags().StringVar(
 		&snConfig.AttestOptions.Recalculate,
 		"estimate-atttest-fee",
 		"once",
 		"When to perform an estimate fee call to know the cost of performing an attestation"+
-			" if no value is provided in the `attest-fee` flag. Options:\n"+
+			" if no value is provided in the 'attest-fee' flag. Options:\n"+
 			" - \"once\": attest fee is estimated once and succesive calls use that value.\n"+
 			" - \"always\": an estimate fee call is done before submitting each attestation.",
 	)
@@ -146,7 +146,7 @@ func NewCommand() cobra.Command {
 func main() {
 	command := NewCommand()
 	if err := command.ExecuteContext(context.Background()); err != nil {
-		fmt.Println("Unexpected error:\n", err)
+		fmt.Println("Unexpected error:\n", err.Error())
 		os.Exit(1)
 	}
 }

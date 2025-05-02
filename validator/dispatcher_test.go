@@ -25,7 +25,7 @@ func TestDispatch(t *testing.T) {
 	mockAccount := mocks.NewMockSigner(mockCtrl)
 	logger := utils.NewNopZapLogger()
 
-	contractAddresses := new(config.ContractAddresses).SetDefaults("sepolia")
+	contractAddresses := new(config.ContractAddresses).SetDefaults("SN_SEPOLIA")
 	validationContracts := types.ValidationContractsFromAddresses(contractAddresses)
 
 	t.Run("Simple scenario: only 1 attest that succeeds", func(t *testing.T) {

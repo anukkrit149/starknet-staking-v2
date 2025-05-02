@@ -32,11 +32,12 @@ func TestNewExternalSigner(t *testing.T) {
 
 		externalSigner, err := signer.NewExternalSigner(
 			provider,
+			utils.NewNopZapLogger(),
 			&config.Signer{
 				ExternalUrl:        "http://localhost:1234",
 				OperationalAddress: "0x123",
 			},
-			new(config.ContractAddresses).SetDefaults("sepolia"),
+			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
 		)
 
 		require.Zero(t, externalSigner)
@@ -47,6 +48,8 @@ func TestNewExternalSigner(t *testing.T) {
 func TestExternalSignerAddress(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	t.Cleanup(mockCtrl.Finish)
+
+	logger := utils.NewNopZapLogger()
 
 	t.Run("Return signer address", func(t *testing.T) {
 		operationalAddress := utils.HexToFelt(t, "0x123")
@@ -59,11 +62,12 @@ func TestExternalSignerAddress(t *testing.T) {
 
 		externalSigner, err := signer.NewExternalSigner(
 			provider,
+			logger,
 			&config.Signer{
 				ExternalUrl:        "http://localhost:1234",
 				OperationalAddress: "0x123",
 			},
-			new(config.ContractAddresses).SetDefaults("sepolia"),
+			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
 		)
 		require.NoError(t, err)
 
@@ -74,6 +78,8 @@ func TestExternalSignerAddress(t *testing.T) {
 func TestBuildAndSendInvokeTxn(t *testing.T) {
 	mockCtrl := gomock.NewController(t)
 	t.Cleanup(mockCtrl.Finish)
+
+	logger := utils.NewNopZapLogger()
 
 	t.Run("Error getting nonce", func(t *testing.T) {
 		env, err := validator.LoadEnv(t)
@@ -86,11 +92,12 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 
 		externalSigner, err := signer.NewExternalSigner(
 			provider,
+			logger,
 			&config.Signer{
 				ExternalUrl:        "http://localhost:1234",
 				OperationalAddress: "0x123",
 			},
-			new(config.ContractAddresses).SetDefaults("sepolia"),
+			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
 		)
 		require.NoError(t, err)
 
@@ -124,11 +131,12 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 
 		externalSigner, err := signer.NewExternalSigner(
 			provider,
+			logger,
 			&config.Signer{
 				ExternalUrl:        mockServer.URL,
 				OperationalAddress: "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e",
 			},
-			new(config.ContractAddresses).SetDefaults("sepolia"),
+			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
 		)
 		require.NoError(t, err)
 
@@ -164,11 +172,12 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 
 		externalSigner, err := signer.NewExternalSigner(
 			provider,
+			logger,
 			&config.Signer{
 				ExternalUrl:        mockServer.URL,
 				OperationalAddress: "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e",
 			},
-			new(config.ContractAddresses).SetDefaults("sepolia"),
+			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
 		)
 		require.NoError(t, err)
 
@@ -211,11 +220,12 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 
 			externalSigner, err := signer.NewExternalSigner(
 				provider,
+				logger,
 				&config.Signer{
 					ExternalUrl:        mockSigner.URL,
 					OperationalAddress: "0xabc",
 				},
-				new(config.ContractAddresses).SetDefaults("sepolia"),
+				new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
 			)
 			require.NoError(t, err)
 
@@ -258,11 +268,12 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 
 		externalSigner, err := signer.NewExternalSigner(
 			provider,
+			logger,
 			&config.Signer{
 				ExternalUrl:        mockSigner.URL,
 				OperationalAddress: "0xabc",
 			},
-			new(config.ContractAddresses).SetDefaults("sepolia"),
+			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
 		)
 		require.NoError(t, err)
 
@@ -313,11 +324,12 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 
 		externalSigner, err := signer.NewExternalSigner(
 			provider,
+			logger,
 			&config.Signer{
 				ExternalUrl:        mockSigner.URL,
 				OperationalAddress: "0xabc",
 			},
-			new(config.ContractAddresses).SetDefaults("sepolia"),
+			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
 		)
 		require.NoError(t, err)
 

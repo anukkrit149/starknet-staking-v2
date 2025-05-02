@@ -116,7 +116,7 @@ func MockRpcServer(t *testing.T, operationalAddress *felt.Felt, serverInternalEr
 func SepoliaValidationContracts(t *testing.T) *ValidationContracts {
 	t.Helper()
 
-	addresses := new(config.ContractAddresses).SetDefaults("sepolia")
+	addresses := new(config.ContractAddresses).SetDefaults("SN_SEPOLIA")
 	contracts := types.ValidationContractsFromAddresses(addresses)
 	return &contracts
 }

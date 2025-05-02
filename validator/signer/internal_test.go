@@ -14,7 +14,7 @@ import (
 	"github.com/NethermindEth/juno/core/felt"
 	"github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet-staking-v2/mocks"
-	s "github.com/NethermindEth/starknet-staking-v2/signer"
+	signerP "github.com/NethermindEth/starknet-staking-v2/signer"
 	"github.com/NethermindEth/starknet-staking-v2/validator"
 	"github.com/NethermindEth/starknet-staking-v2/validator/config"
 	"github.com/NethermindEth/starknet-staking-v2/validator/constants"
@@ -36,7 +36,7 @@ func TestNewInternalSigner(t *testing.T) {
 	envVars, envVarsErr := validator.LoadEnv(t)
 	loadedEnvVars := envVarsErr == nil
 
-	contractAddresses := new(config.ContractAddresses).SetDefaults("sepolia")
+	contractAddresses := new(config.ContractAddresses).SetDefaults("SN_SEPOLIA")
 
 	t.Run("Error: private key conversion", func(t *testing.T) {
 		if !loadedEnvVars {
@@ -61,7 +61,6 @@ func TestNewInternalSigner(t *testing.T) {
 			t.Skipf("couldn't load env vars: %s", envVarsErr.Error())
 		}
 
-		println(envVars.HttpProviderUrl)
 		provider, err := rpc.NewProvider(envVars.HttpProviderUrl)
 		require.NoError(t, err)
 
@@ -71,6 +70,7 @@ func TestNewInternalSigner(t *testing.T) {
 		}
 
 		// Test
+		logger, _ := utils.NewZapLogger(utils.DEBUG, true)
 		internalSigner, err := signer.NewInternalSigner(
 			provider, logger, &configSigner, contractAddresses,
 		)
@@ -94,8 +94,6 @@ func TestNewInternalSigner(t *testing.T) {
 		require.Equal(
 			t, validator.SepoliaValidationContracts(t), internalSigner.ValidationContracts(),
 		)
-
-		require.Nil(t, err)
 	})
 
 	t.Run("Error: cannot create validator account", func(t *testing.T) {
@@ -251,7 +249,7 @@ func TestSignInvokeTx(t *testing.T) {
 					bodyBytes, err := io.ReadAll(r.Body)
 					require.NoError(t, err)
 
-					var req s.Request
+					var req signerP.Request
 					err = json.Unmarshal(bodyBytes, &req)
 					require.NoError(t, err)
 

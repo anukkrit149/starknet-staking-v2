@@ -54,7 +54,7 @@ func NewInternalSigner(
 	validationContracts := types.ValidationContractsFromAddresses(
 		addresses.SetDefaults(chainIdStr),
 	)
-	logger.Debugw("validation contracts: %s", validationContracts.String())
+	logger.Debugf("validation contracts: %s", validationContracts.String())
 
 	logger.Debugw("Validator account has been set up", "address", accountAddr.String())
 	return InternalSigner{
@@ -63,7 +63,9 @@ func NewInternalSigner(
 	}, nil
 }
 
-func (v *InternalSigner) GetTransactionStatus(ctx context.Context, transactionHash *felt.Felt) (*rpc.TxnStatusResp, error) {
+func (v *InternalSigner) GetTransactionStatus(
+	ctx context.Context, transactionHash *felt.Felt,
+) (*rpc.TxnStatusResp, error) {
 	return v.Account.Provider.GetTransactionStatus(ctx, transactionHash)
 }
 
