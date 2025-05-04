@@ -132,10 +132,16 @@ func FetchEpochAndAttestInfo[S Signer](
 		WindowEnd:   blockNum + BlockNumber(attestWindow),
 	}
 
-	logger.Infow(
-		"Target block to attest to",
-		"epoch ID", epochInfo.EpochId,
-		"attestation info", attestInfo,
+	logger.Infof(
+		"Target block to attest to at %d. Attestation window: %d <> %d",
+		attestInfo.TargetBlock.Uint64(),
+		attestInfo.WindowStart.Uint64(),
+		attestInfo.WindowEnd.Uint64(),
+	)
+	logger.Debugw(
+		"Epoch and Attestation info",
+		"Epoch", epochInfo,
+		"Attestation", attestInfo,
 	)
 	return epochInfo, attestInfo, nil
 }

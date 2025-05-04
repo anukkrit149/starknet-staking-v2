@@ -54,7 +54,7 @@ func NewInternalSigner(
 	validationContracts := types.ValidationContractsFromAddresses(
 		addresses.SetDefaults(chainIdStr),
 	)
-	logger.Debugf("validation contracts: %s", validationContracts.String())
+	logger.Infof("validation contracts: %s", validationContracts.String())
 
 	logger.Debugw("Validator account has been set up", "address", accountAddr.String())
 	return InternalSigner{

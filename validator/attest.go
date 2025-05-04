@@ -14,6 +14,8 @@ import (
 	"github.com/sourcegraph/conc"
 )
 
+const Version = "0.2.0"
+
 // Main execution loop of the program. Listens to the blockchain and sends
 // attest invoke when it's the right time
 func Attest(
@@ -30,7 +32,8 @@ func Attest(
 	// Ignoring from now, until Starknet.go allow us to have a fixed Starknet option
 	_, err = types.AttestFeeFromString(snConfig.AttestOptions)
 	if err != nil {
-		return err
+		// do nothing for now
+		// return err
 	}
 
 	var signer signerP.Signer
@@ -122,7 +125,8 @@ func ProcessBlockHeaders[Account signerP.Signer](
 	SetTargetBlockHashIfExists(account, logger, &attestInfo)
 
 	for blockHeader := range headersFeed {
-		logger.Infow("Block header received", "block header", blockHeader)
+		logger.Infof("Block %d received", blockHeader.BlockNumber)
+		logger.Debugw("Block header information", "block header", blockHeader)
 
 		if blockHeader.BlockNumber == epochInfo.CurrentEpochStartingBlock.Uint64()+epochInfo.EpochLen {
 			logger.Infow("New epoch start", "epoch id", epochInfo.EpochId+1)
@@ -183,8 +187,11 @@ func SetTargetBlockHashIfExists[Account signerP.Signer](
 		if block, ok := res.(*rpc.BlockTxHashes); ok {
 			attestInfo.TargetBlockHash = BlockHash(*block.BlockHash)
 			logger.Infow(
-				"Target block already exists, registered block hash to attest to.",
+				"Target block already exists. Registering block hash.",
+				"target block", attestInfo.TargetBlock.Uint64(),
 				"block hash", attestInfo.TargetBlockHash.String(),
+				"window start", attestInfo.WindowStart.Uint64(),
+				"window end", attestInfo.WindowStart.Uint64(),
 			)
 		}
 	}

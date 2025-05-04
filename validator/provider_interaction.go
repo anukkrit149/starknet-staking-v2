@@ -49,6 +49,6 @@ func SubscribeToBlockHeaders[Logger utils.Logger](wsProviderUrl string, logger L
 		return nil, nil, nil, errors.Errorf("subscribing to new block headers: %s", err)
 	}
 
-	logger.Infof("Subscribed to new block headers", "subscription ID", clientSubscription.ID())
+	logger.Infof("Subscribed to new block header. Subscription ID: %s", clientSubscription.ID())
 	return wsProvider, headersFeed, clientSubscription, nil
 }
