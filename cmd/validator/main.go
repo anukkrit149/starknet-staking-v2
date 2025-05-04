@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/NethermindEth/juno/utils"
@@ -10,6 +11,16 @@ import (
 	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/spf13/cobra"
 )
+
+const greeting = `
+
+   _____  __  _   __     ___    __     __          
+  / __/ |/ / | | / /__ _/ (_)__/ /__ _/ /____  ____
+ _\ \/    /  | |/ / _ \/ / / _  / _ \/ __/ _ \/ __/
+/___/_/|_/   |___/\_,_/_/_/\_,_/\_,_/\__/\___/_/v%s   
+Validator program for Starknet stakers created by Nethermind
+
+`
 
 func NewCommand() cobra.Command {
 	var configPath string
@@ -60,6 +71,7 @@ func NewCommand() cobra.Command {
 	}
 
 	run := func(cmd *cobra.Command, args []string) {
+		fmt.Printf(greeting, validator.Version)
 		if err := validator.Attest(&config, &snConfig, maxRetries, logger); err != nil {
 			logger.Error(err)
 		}
@@ -68,6 +80,7 @@ func NewCommand() cobra.Command {
 	cmd := cobra.Command{
 		Use:     "validator",
 		Short:   "Program for Starknet validators to attest to epochs with respect to Staking v2",
+		Version: validator.Version,
 		PreRunE: preRunE,
 		Run:     run,
 		Args:    cobra.NoArgs,
