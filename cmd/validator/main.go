@@ -95,7 +95,7 @@ func NewCommand() cobra.Command {
 
 	// Config signer flags
 	cmd.Flags().StringVar(
-		&config.Signer.ExternalUrl,
+		&config.Signer.ExternalURL,
 		"signer-url",
 		"",
 		"Signer url address, required if using an external signer",
@@ -130,7 +130,7 @@ func NewCommand() cobra.Command {
 	// 	"once",
 	// 	"This flag determines the fee to pay for each attest transaction."+
 	// 		" It can be either a positive number or one of the follwing options:\n"+
-	// 		" - \"once\": attest fee is estimated once and succesive calls use that value.\n"+
+	// 		" - \"once\": attest fee is estimated once and successive calls use that value.\n"+
 	// 		" - \"always\": an estimate fee call is done before submitting each attestation.",
 	// )
 	// Other flags

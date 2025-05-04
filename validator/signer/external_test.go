@@ -1,7 +1,6 @@
 package signer_test
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -34,7 +33,7 @@ func TestNewExternalSigner(t *testing.T) {
 			provider,
 			utils.NewNopZapLogger(),
 			&config.Signer{
-				ExternalUrl:        "http://localhost:1234",
+				ExternalURL:        "http://localhost:1234",
 				OperationalAddress: "0x123",
 			},
 			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
@@ -54,7 +53,7 @@ func TestExternalSignerAddress(t *testing.T) {
 	t.Run("Return signer address", func(t *testing.T) {
 		operationalAddress := utils.HexToFelt(t, "0x123")
 
-		mockRpc := validator.MockRpcServer(t, operationalAddress, "")
+		mockRpc := validator.MockRPCServer(t, operationalAddress, "")
 		defer mockRpc.Close()
 
 		provider, err := rpc.NewProvider(mockRpc.URL)
@@ -64,7 +63,7 @@ func TestExternalSignerAddress(t *testing.T) {
 			provider,
 			logger,
 			&config.Signer{
-				ExternalUrl:        "http://localhost:1234",
+				ExternalURL:        "http://localhost:1234",
 				OperationalAddress: "0x123",
 			},
 			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
@@ -94,7 +93,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 			provider,
 			logger,
 			&config.Signer{
-				ExternalUrl:        "http://localhost:1234",
+				ExternalURL:        "http://localhost:1234",
 				OperationalAddress: "0x123",
 			},
 			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
@@ -102,7 +101,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 		require.NoError(t, err)
 
 		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(
-			context.Background(), []rpc.InvokeFunctionCall{}, constants.FEE_ESTIMATION_MULTIPLIER,
+			t.Context(), []rpc.InvokeFunctionCall{}, constants.FEE_ESTIMATION_MULTIPLIER,
 		)
 
 		require.Nil(t, addInvokeTxRes)
@@ -119,7 +118,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 		provider, providerErr := rpc.NewProvider(env.HttpProviderUrl)
 		require.NoError(t, providerErr)
 
-		serverError := "some internal error"
+		const serverError = "some internal error"
 		// Create a mock server
 		mockServer := httptest.NewServer(
 			http.HandlerFunc(
@@ -133,7 +132,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 			provider,
 			logger,
 			&config.Signer{
-				ExternalUrl:        mockServer.URL,
+				ExternalURL:        mockServer.URL,
 				OperationalAddress: "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e",
 			},
 			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
@@ -141,7 +140,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 		require.NoError(t, err)
 
 		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(
-			context.Background(), []rpc.InvokeFunctionCall{}, constants.FEE_ESTIMATION_MULTIPLIER,
+			t.Context(), []rpc.InvokeFunctionCall{}, constants.FEE_ESTIMATION_MULTIPLIER,
 		)
 
 		require.Nil(t, addInvokeTxRes)
@@ -174,7 +173,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 			provider,
 			logger,
 			&config.Signer{
-				ExternalUrl:        mockServer.URL,
+				ExternalURL:        mockServer.URL,
 				OperationalAddress: "0x011efbf2806a9f6fe043c91c176ed88c38907379e59d2d3413a00eeeef08aa7e",
 			},
 			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
@@ -182,7 +181,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 		require.NoError(t, err)
 
 		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(
-			context.Background(),
+			t.Context(),
 			[]rpc.InvokeFunctionCall{},
 			constants.FEE_ESTIMATION_MULTIPLIER,
 		)
@@ -194,7 +193,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 	t.Run(
 		"Error signing transaction the second time (for the actual invoke tx)",
 		func(t *testing.T) {
-			mockRpc := createMockRpcServer(t, nil)
+			mockRpc := createMockRPCServer(t, nil)
 			defer mockRpc.Close()
 
 			signerCalledCount := 0
@@ -222,7 +221,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 				provider,
 				logger,
 				&config.Signer{
-					ExternalUrl:        mockSigner.URL,
+					ExternalURL:        mockSigner.URL,
 					OperationalAddress: "0xabc",
 				},
 				new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
@@ -230,7 +229,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 			require.NoError(t, err)
 
 			addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(
-				context.Background(),
+				t.Context(),
 				[]rpc.InvokeFunctionCall{},
 				constants.FEE_ESTIMATION_MULTIPLIER,
 			)
@@ -251,7 +250,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 			_, err := w.Write([]byte(serverInternalError))
 			require.NoError(t, err)
 		}
-		mockRpc := createMockRpcServer(t, addInvoke)
+		mockRpc := createMockRPCServer(t, addInvoke)
 		defer mockRpc.Close()
 
 		mockSigner := httptest.NewServer(
@@ -270,7 +269,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 			provider,
 			logger,
 			&config.Signer{
-				ExternalUrl:        mockSigner.URL,
+				ExternalURL:        mockSigner.URL,
 				OperationalAddress: "0xabc",
 			},
 			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
@@ -278,7 +277,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 		require.NoError(t, err)
 
 		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(
-			context.Background(),
+			t.Context(),
 			[]rpc.InvokeFunctionCall{},
 			constants.FEE_ESTIMATION_MULTIPLIER,
 		)
@@ -307,7 +306,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 			)
 			require.NoError(t, err)
 		}
-		mockRpc := createMockRpcServer(t, addInvoke)
+		mockRpc := createMockRPCServer(t, addInvoke)
 		defer mockRpc.Close()
 
 		mockSigner := httptest.NewServer(
@@ -326,7 +325,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 			provider,
 			logger,
 			&config.Signer{
-				ExternalUrl:        mockSigner.URL,
+				ExternalURL:        mockSigner.URL,
 				OperationalAddress: "0xabc",
 			},
 			new(config.ContractAddresses).SetDefaults("SN_SEPOLIA"),
@@ -334,7 +333,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 		require.NoError(t, err)
 
 		addInvokeTxRes, err := externalSigner.BuildAndSendInvokeTxn(
-			context.Background(),
+			t.Context(),
 			[]rpc.InvokeFunctionCall{},
 			constants.FEE_ESTIMATION_MULTIPLIER,
 		)
@@ -346,7 +345,7 @@ func TestBuildAndSendInvokeTxn(t *testing.T) {
 
 func TestHashAndSignTx(t *testing.T) {
 	t.Run("Error making request", func(t *testing.T) {
-		externalSignerUrl := "http://localhost:1234"
+		externalSignerURL := "http://localhost:1234"
 
 		invokeTxnV3 := snUtils.BuildInvokeTxn(
 			utils.HexToFelt(t, "0x123"),
@@ -354,8 +353,8 @@ func TestHashAndSignTx(t *testing.T) {
 			[]*felt.Felt{},
 			rpc.ResourceBoundsMapping{},
 		)
-		chainId := new(felt.Felt).SetUint64(1)
-		res, err := signer.HashAndSignTx(&invokeTxnV3.InvokeTxnV3, chainId, externalSignerUrl)
+		chainID := new(felt.Felt).SetUint64(1)
+		res, err := signer.HashAndSignTx(&invokeTxnV3.InvokeTxnV3, chainID, externalSignerURL)
 
 		require.Zero(t, res)
 		require.ErrorContains(t, err, "connection refused")
@@ -381,8 +380,8 @@ func TestHashAndSignTx(t *testing.T) {
 			[]*felt.Felt{},
 			rpc.ResourceBoundsMapping{},
 		)
-		chainId := new(felt.Felt).SetUint64(1)
-		res, err := signer.HashAndSignTx(&invokeTxnV3.InvokeTxnV3, chainId, mockServer.URL)
+		chainID := new(felt.Felt).SetUint64(1)
+		res, err := signer.HashAndSignTx(&invokeTxnV3.InvokeTxnV3, chainID, mockServer.URL)
 
 		require.Zero(t, res)
 		expectedErrorMsg := fmt.Sprintf("server error %d: %s", http.StatusInternalServerError, serverError)
@@ -407,8 +406,8 @@ func TestHashAndSignTx(t *testing.T) {
 			[]*felt.Felt{},
 			rpc.ResourceBoundsMapping{},
 		)
-		chainId := new(felt.Felt).SetUint64(1)
-		res, err := signer.HashAndSignTx(&invokeTxnV3.InvokeTxnV3, chainId, mockServer.URL)
+		chainID := new(felt.Felt).SetUint64(1)
+		res, err := signer.HashAndSignTx(&invokeTxnV3.InvokeTxnV3, chainID, mockServer.URL)
 
 		require.Zero(t, res)
 		require.ErrorContains(t, err, "invalid character")
@@ -432,8 +431,8 @@ func TestHashAndSignTx(t *testing.T) {
 			[]*felt.Felt{},
 			rpc.ResourceBoundsMapping{},
 		)
-		chainId := new(felt.Felt).SetUint64(1)
-		res, err := signer.HashAndSignTx(&invokeTxnV3.InvokeTxnV3, chainId, mockServer.URL)
+		chainID := new(felt.Felt).SetUint64(1)
+		res, err := signer.HashAndSignTx(&invokeTxnV3.InvokeTxnV3, chainID, mockServer.URL)
 
 		expectedResult := s.Response{
 			Signature: [2]*felt.Felt{

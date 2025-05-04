@@ -18,7 +18,7 @@ func TestConfigFromFile(t *testing.T) {
 
 	t.Run("Error when unmarshalling file data", func(t *testing.T) {
 		// Create a temporary file
-		tmpFile, err := os.CreateTemp("", "config-*.json")
+		tmpFile, err := os.CreateTemp(t.TempDir(), "config-*.json")
 		require.NoError(t, err)
 
 		// Remove temporary file at the end of test
@@ -28,7 +28,7 @@ func TestConfigFromFile(t *testing.T) {
 		invalidJSON := `{"someField": 1,}` // Trailing comma makes it invalid
 
 		// Write invalid JSON content to the file
-		if _, err := tmpFile.Write([]byte(invalidJSON)); err != nil {
+		if _, err := tmpFile.WriteString(invalidJSON); err != nil {
 			require.NoError(t, err)
 		}
 		require.NoError(t, tmpFile.Close())
@@ -61,7 +61,7 @@ func TestConfigFromFile(t *testing.T) {
 				Ws:   "ws://localhost:1235",
 			},
 			Signer: Signer{
-				ExternalUrl:        "http://localhost:5678",
+				ExternalURL:        "http://localhost:5678",
 				PrivKey:            "0x123",
 				OperationalAddress: "0x456",
 			},
@@ -72,10 +72,10 @@ func TestConfigFromFile(t *testing.T) {
 
 func TestConfigFromEnv(t *testing.T) {
 	// Test Provider
-	http, unset := setEnv(t, "PROVIDER_HTTP_URL", "hola")
-	defer unset()
-	ws, unset := setEnv(t, "PROVIDER_WS_URL", "ola")
-	defer unset()
+	http := "hola"
+	t.Setenv("PROVIDER_HTTP_URL", http)
+	ws := "ola"
+	t.Setenv("PROVIDER_WS_URL", ws)
 
 	provider := ProviderFromEnv()
 	expectedProvider := Provider{
@@ -89,16 +89,16 @@ func TestConfigFromEnv(t *testing.T) {
 	)
 
 	// Test Signer
-	url, unset := setEnv(t, "SIGNER_EXTERNAL_URL", "ciao")
-	defer unset()
-	privateKey, unset := setEnv(t, "SIGNER_PRIVATE_KEY", "bonjour")
-	defer unset()
-	operationalAddress, unset := setEnv(t, "SIGNER_OPERATIONAL_ADDRESS", "hallo")
-	defer unset()
+	url := "ciao"
+	t.Setenv("SIGNER_EXTERNAL_URL", url)
+	privateKey := "bonjour"
+	t.Setenv("SIGNER_PRIVATE_KEY", privateKey)
+	operationalAddress := "hallo"
+	t.Setenv("SIGNER_OPERATIONAL_ADDRESS", operationalAddress)
 
 	signer := SignerFromEnv()
 	expectedSigner := Signer{
-		ExternalUrl:        url,
+		ExternalURL:        url,
 		PrivKey:            privateKey,
 		OperationalAddress: operationalAddress,
 	}
@@ -264,21 +264,4 @@ func TestConfigFill(t *testing.T) {
 	config1.Fill(&config2)
 	assert.Equal(t, expectedConfig1, config1)
 	assert.Equal(t, expectedConfig2, config2)
-}
-
-// Set environment variable `varname` to `value` if it is unset. Returns the value of
-// the env var and a function that unsets it (if it wasn't already set)
-func setEnv(t *testing.T, varName, value string) (string, func()) {
-	t.Helper()
-
-	originalVal := os.Getenv(varName)
-	if originalVal != "" {
-		return originalVal, func() {}
-	}
-
-	err := os.Setenv(varName, value)
-	require.NoError(t, err)
-	unset := func() { require.NoError(t, os.Unsetenv(varName)) }
-
-	return value, unset
 }

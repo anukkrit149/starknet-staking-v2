@@ -84,7 +84,7 @@ func FetchAttestWindow[S Signer](signer S) (uint64, error) {
 
 // For near future when tracking validator's balance
 func FetchValidatorBalance[Account Signer](account Account) (Balance, error) {
-	var StrkTokenContract Address = types.AddressFromString(constants.STRK_CONTRACT_ADDRESS)
+	StrkTokenContract := types.AddressFromString(constants.STRK_CONTRACT_ADDRESS)
 	result, err := account.Call(
 		context.Background(),
 		rpc.FunctionCall{

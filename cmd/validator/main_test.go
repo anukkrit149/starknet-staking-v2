@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -16,7 +15,7 @@ func TestNewCommand(t *testing.T) {
 		command := main.NewCommand()
 		command.SetArgs([]string{"--config", "some inexisting file name"})
 
-		err := command.ExecuteContext(context.Background())
+		err := command.ExecuteContext(t.Context())
 		require.ErrorIs(t, err, os.ErrNotExist)
 	})
 
@@ -37,7 +36,7 @@ func TestNewCommand(t *testing.T) {
 
 		command.SetArgs([]string{"--config", filePath})
 
-		err := command.ExecuteContext(context.Background())
+		err := command.ExecuteContext(t.Context())
 		require.ErrorContains(t, err, "private key")
 	})
 
@@ -59,7 +58,7 @@ func TestNewCommand(t *testing.T) {
 
 		command.SetArgs([]string{"--config", filePath})
 
-		err := command.ExecuteContext(context.Background())
+		err := command.ExecuteContext(t.Context())
 		require.Nil(t, err)
 	})
 
@@ -71,7 +70,7 @@ func TestNewCommand(t *testing.T) {
 			"--signer-op-address", "0x456",
 			"--signer-url", "http://localhost:5555",
 		})
-		err := command.ExecuteContext(context.Background())
+		err := command.ExecuteContext(t.Context())
 		require.NoError(t, err)
 	})
 
@@ -96,7 +95,7 @@ func TestNewCommand(t *testing.T) {
 			"--signer-op-address", "0x456",
 		})
 
-		err = command.ExecuteContext(context.Background())
+		err = command.ExecuteContext(t.Context())
 		require.NoError(t, err)
 	})
 	t.Run("Priority order is flags -> env vars -> config file", func(t *testing.T) {
@@ -117,10 +116,7 @@ func TestNewCommand(t *testing.T) {
 		defer deleteFile(t, filePath)
 
 		// Configuration through env var
-		require.NoError(t, os.Setenv("SIGNER_EXTERNAL_URL", "some other"))
-		defer func() {
-			require.NoError(t, os.Unsetenv("SIGNER_EXTERNAL_URL"))
-		}()
+		t.Setenv("SIGNER_EXTERNAL_URL", "some other")
 
 		command := main.NewCommand()
 		command.SetArgs([]string{
@@ -128,7 +124,7 @@ func TestNewCommand(t *testing.T) {
 			"--provider-http", "12",
 		})
 
-		err = command.ExecuteContext(context.Background())
+		err = command.ExecuteContext(t.Context())
 		// Very hard to test with the current architecture
 		// return in the future to fix it
 		require.NoError(t, err)
@@ -139,7 +135,7 @@ func createTemporaryConfigFile(t *testing.T, config *config.Config) string {
 	t.Helper()
 
 	// Create a temporary file
-	tmpFile, err := os.CreateTemp("", "config-*.json")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "config-*.json")
 	require.NoError(t, err)
 
 	// Encode the mocked config to JSON and write to the file

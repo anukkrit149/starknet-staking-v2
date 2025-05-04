@@ -48,7 +48,7 @@ func NewExternalSigner(
 	return ExternalSigner{
 		Provider:            provider,
 		operationalAddress:  types.AddressFromString(signer.OperationalAddress),
-		url:                 signer.ExternalUrl,
+		url:                 signer.ExternalURL,
 		chainId:             *chainId,
 		validationContracts: validationContracts,
 	}, nil

@@ -7,10 +7,10 @@ import (
 	"github.com/NethermindEth/starknet-staking-v2/validator/constants"
 )
 
-type chainId int
+type chainID int
 
 const (
-	mainnet chainId = iota
+	mainnet chainID = iota
 	sepolia
 	unknown
 )
@@ -29,13 +29,15 @@ var defaults = [2]ContractAddresses{
 	},
 }
 
-func chainIdFromStr(s string) chainId {
-	if s == "SN_MAINNET" {
+func chainIDFromStr(s string) chainID {
+	switch s {
+	case "SN_MAINNET":
 		return mainnet
-	} else if s == "SN_SEPOLIA" {
+	case "SN_SEPOLIA":
 		return sepolia
+	default:
+		return unknown
 	}
-	return unknown
 }
 
 type ContractAddresses struct {
@@ -43,13 +45,13 @@ type ContractAddresses struct {
 	Attest  string
 }
 
-func (ca *ContractAddresses) SetDefaults(chainIdStr string) *ContractAddresses {
-	chainId := chainIdFromStr(chainIdStr)
-	if chainId == unknown {
+func (ca *ContractAddresses) SetDefaults(chainIDStr string) *ContractAddresses {
+	chainID := chainIDFromStr(chainIDStr)
+	if chainID == unknown {
 		return ca
 	}
 
-	defaultConfig := defaults[int(chainId)]
+	defaultConfig := defaults[int(chainID)]
 	if isZero(ca.Staking) {
 		ca.Staking = defaultConfig.Staking
 	}
@@ -85,8 +87,8 @@ type StarknetConfig struct {
 	AttestOptions     string
 }
 
-func (c *StarknetConfig) SetDefaults(chainId string) *StarknetConfig {
-	c.ContractAddresses.SetDefaults(chainId)
+func (c *StarknetConfig) SetDefaults(chainID string) *StarknetConfig {
+	c.ContractAddresses.SetDefaults(chainID)
 	return c
 }
 

@@ -30,11 +30,11 @@ func Attest(
 	}
 
 	// Ignoring from now, until Starknet.go allow us to have a fixed Starknet option
-	_, err = types.AttestFeeFromString(snConfig.AttestOptions)
-	if err != nil {
-		// do nothing for now
-		// return err
-	}
+	_, _ = types.AttestFeeFromString(snConfig.AttestOptions)
+	// if err != nil {
+	// 	// do nothing for now
+	// 	// return err
+	// }
 
 	var signer signerP.Signer
 	if config.Signer.External() {
@@ -45,7 +45,6 @@ func Attest(
 			return err
 		}
 		signer = &externalSigner
-
 	} else {
 		internalSigner, err := signerP.NewInternalSigner(
 			provider, &logger, &config.Signer, &snConfig.ContractAddresses,

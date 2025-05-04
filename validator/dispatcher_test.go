@@ -1,7 +1,6 @@
 package validator_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/NethermindEth/juno/core/felt"
@@ -43,7 +42,7 @@ func TestDispatch(t *testing.T) {
 		mockedAddTxResp := rpc.AddInvokeTransactionResponse{TransactionHash: addTxHash}
 		mockAccount.EXPECT().
 			BuildAndSendInvokeTxn(
-				context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
+				t.Context(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
 			).
 			Return(&mockedAddTxResp, nil)
 		mockAccount.EXPECT().ValidationContracts().Return(
@@ -60,7 +59,7 @@ func TestDispatch(t *testing.T) {
 
 		// Preparation for EndOfWindow event
 		mockAccount.EXPECT().
-			GetTransactionStatus(context.Background(), addTxHash).
+			GetTransactionStatus(t.Context(), addTxHash).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus:  rpc.TxnStatus_Accepted_On_L2,
 				ExecutionStatus: rpc.TxnExecutionStatusSUCCEEDED,
@@ -105,7 +104,7 @@ func TestDispatch(t *testing.T) {
 			// We expect BuildAndSendInvokeTxn to be called only once (even though 3 events are sent)
 			mockAccount.EXPECT().
 				BuildAndSendInvokeTxn(
-					context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
+					t.Context(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
 				).
 				Return(&mockedAddTxResp, nil).
 				Times(1)
@@ -125,7 +124,7 @@ func TestDispatch(t *testing.T) {
 
 			// Invoke tx is RECEIVED
 			mockAccount.EXPECT().
-				GetTransactionStatus(context.Background(), addTxHash).
+				GetTransactionStatus(t.Context(), addTxHash).
 				Return(&rpc.TxnStatusResp{
 					FinalityStatus: rpc.TxnStatus_Received,
 				}, nil).
@@ -139,7 +138,7 @@ func TestDispatch(t *testing.T) {
 
 			// Invoke tx ended up ACCEPTED
 			mockAccount.EXPECT().
-				GetTransactionStatus(context.Background(), addTxHash).
+				GetTransactionStatus(t.Context(), addTxHash).
 				Return(&rpc.TxnStatusResp{
 					FinalityStatus:  rpc.TxnStatus_Accepted_On_L2,
 					ExecutionStatus: rpc.TxnExecutionStatusSUCCEEDED,
@@ -186,7 +185,7 @@ func TestDispatch(t *testing.T) {
 		// We expect BuildAndSendInvokeTxn to be called only once (for the 2 first events)
 		mockAccount.EXPECT().
 			BuildAndSendInvokeTxn(
-				context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
+				t.Context(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
 			).
 			Return(&mockedAddTxResp1, nil).
 			Times(1)
@@ -206,7 +205,7 @@ func TestDispatch(t *testing.T) {
 
 		// Invoke tx status is RECEIVED
 		mockAccount.EXPECT().
-			GetTransactionStatus(context.Background(), addTxHash1).
+			GetTransactionStatus(t.Context(), addTxHash1).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus: rpc.TxnStatus_Received,
 			}, nil).
@@ -220,7 +219,7 @@ func TestDispatch(t *testing.T) {
 
 		// Invoke tx fails, will make a new invoke tx
 		mockAccount.EXPECT().
-			GetTransactionStatus(context.Background(), addTxHash1).
+			GetTransactionStatus(t.Context(), addTxHash1).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus:  rpc.TxnStatus_Accepted_On_L2,
 				ExecutionStatus: rpc.TxnExecutionStatusREVERTED,
@@ -234,7 +233,7 @@ func TestDispatch(t *testing.T) {
 		// We expect a 2nd call to BuildAndSendInvokeTxn
 		mockAccount.EXPECT().
 			BuildAndSendInvokeTxn(
-				context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
+				t.Context(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
 			).
 			Return(&mockedAddTxResp2, nil).
 			Times(1)
@@ -280,7 +279,7 @@ func TestDispatch(t *testing.T) {
 			// We expect BuildAndSendInvokeTxn to fail once
 			mockAccount.EXPECT().
 				BuildAndSendInvokeTxn(
-					context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
+					t.Context(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
 				).
 				Return(nil, errors.New("sending invoke tx failed for some reason")).
 				Times(1)
@@ -306,7 +305,7 @@ func TestDispatch(t *testing.T) {
 			mockedAddTxResp := rpc.AddInvokeTransactionResponse{TransactionHash: addTxHash}
 			mockAccount.EXPECT().
 				BuildAndSendInvokeTxn(
-					context.Background(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
+					t.Context(), calls, constants.FEE_ESTIMATION_MULTIPLIER,
 				).
 				Return(&mockedAddTxResp, nil).
 				Times(1)
@@ -318,7 +317,7 @@ func TestDispatch(t *testing.T) {
 
 			// We expect GetTransactionStatus to be called only once
 			mockAccount.EXPECT().
-				GetTransactionStatus(context.Background(), addTxHash).
+				GetTransactionStatus(t.Context(), addTxHash).
 				Return(&rpc.TxnStatusResp{
 					FinalityStatus:  rpc.TxnStatus_Accepted_On_L2,
 					ExecutionStatus: rpc.TxnExecutionStatusSUCCEEDED,
@@ -366,13 +365,13 @@ func TestDispatch(t *testing.T) {
 
 		// We expect BuildAndSendInvokeTxn to be called once for event A
 		mockAccount.EXPECT().
-			BuildAndSendInvokeTxn(context.Background(), callsA, constants.FEE_ESTIMATION_MULTIPLIER).
+			BuildAndSendInvokeTxn(t.Context(), callsA, constants.FEE_ESTIMATION_MULTIPLIER).
 			Return(&mockedAddTxRespA, nil).
 			Times(1)
 
 		// We expect GetTransactionStatus to be called for event A (triggered by EndOfWindow)
 		mockAccount.EXPECT().
-			GetTransactionStatus(context.Background(), addTxHashA).
+			GetTransactionStatus(t.Context(), addTxHashA).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus:  rpc.TxnStatus_Accepted_On_L2,
 				ExecutionStatus: rpc.TxnExecutionStatusSUCCEEDED,
@@ -392,14 +391,14 @@ func TestDispatch(t *testing.T) {
 		// We expect BuildAndSendInvokeTxn to be called once for event B
 		mockAccount.EXPECT().
 			BuildAndSendInvokeTxn(
-				context.Background(), callsB, constants.FEE_ESTIMATION_MULTIPLIER,
+				t.Context(), callsB, constants.FEE_ESTIMATION_MULTIPLIER,
 			).
 			Return(&mockedAddTxRespB, nil).
 			Times(1)
 
 		// We expect GetTransactionStatus to be called once for event B (triggered by EndOfWindow)
 		mockAccount.EXPECT().
-			GetTransactionStatus(context.Background(), addTxHashB).
+			GetTransactionStatus(t.Context(), addTxHashB).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus: rpc.TxnStatus_Rejected,
 			}, nil).
@@ -455,7 +454,7 @@ func TestTrackAttest(t *testing.T) {
 		attestEvent := validator.AttestRequired{BlockHash: validator.BlockHash(*blockHash)}
 
 		mockSigner.EXPECT().
-			GetTransactionStatus(context.Background(), txHash).
+			GetTransactionStatus(t.Context(), txHash).
 			Return(nil, validator.ErrTxnHashNotFound)
 
 		txStatus := validator.TrackAttest(mockSigner, logger, &attestEvent, txHash)
@@ -470,7 +469,7 @@ func TestTrackAttest(t *testing.T) {
 		attestEvent := validator.AttestRequired{BlockHash: validator.BlockHash(*blockHash)}
 
 		mockSigner.EXPECT().
-			GetTransactionStatus(context.Background(), txHash).
+			GetTransactionStatus(t.Context(), txHash).
 			Return(nil, errors.New("some internal error"))
 
 		txStatus := validator.TrackAttest(mockSigner, logger, &attestEvent, txHash)
@@ -485,7 +484,7 @@ func TestTrackAttest(t *testing.T) {
 		attestEvent := validator.AttestRequired{BlockHash: validator.BlockHash(*blockHash)}
 
 		mockSigner.EXPECT().
-			GetTransactionStatus(context.Background(), txHash).
+			GetTransactionStatus(t.Context(), txHash).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus: rpc.TxnStatus_Rejected,
 			}, nil)
@@ -503,7 +502,7 @@ func TestTrackAttest(t *testing.T) {
 
 		revertError := "reverted for some reason"
 		mockSigner.EXPECT().
-			GetTransactionStatus(context.Background(), txHash).
+			GetTransactionStatus(t.Context(), txHash).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus:  rpc.TxnStatus_Accepted_On_L2,
 				ExecutionStatus: rpc.TxnExecutionStatusREVERTED,
@@ -522,7 +521,7 @@ func TestTrackAttest(t *testing.T) {
 		attestEvent := validator.AttestRequired{BlockHash: validator.BlockHash(*blockHash)}
 
 		mockSigner.EXPECT().
-			GetTransactionStatus(context.Background(), txHash).
+			GetTransactionStatus(t.Context(), txHash).
 			Return(&rpc.TxnStatusResp{
 				FinalityStatus:  rpc.TxnStatus_Accepted_On_L2,
 				ExecutionStatus: rpc.TxnExecutionStatusSUCCEEDED,

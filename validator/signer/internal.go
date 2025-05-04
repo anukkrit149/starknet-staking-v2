@@ -77,11 +77,15 @@ func (v *InternalSigner) BuildAndSendInvokeTxn(
 	return v.Account.BuildAndSendInvokeTxn(ctx, functionCalls, multiplier)
 }
 
-func (v *InternalSigner) Call(ctx context.Context, call rpc.FunctionCall, blockId rpc.BlockID) ([]*felt.Felt, error) {
+func (v *InternalSigner) Call(
+	ctx context.Context, call rpc.FunctionCall, blockId rpc.BlockID,
+) ([]*felt.Felt, error) {
 	return v.Account.Provider.Call(ctx, call, blockId)
 }
 
-func (v *InternalSigner) BlockWithTxHashes(ctx context.Context, blockID rpc.BlockID) (interface{}, error) {
+func (v *InternalSigner) BlockWithTxHashes(
+	ctx context.Context, blockID rpc.BlockID,
+) (interface{}, error) {
 	return v.Account.Provider.BlockWithTxHashes(ctx, blockID)
 }
 

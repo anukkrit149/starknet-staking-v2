@@ -171,7 +171,6 @@ func TrackAttest[S signerP.Signer](
 	txHash *felt.Felt,
 ) AttestStatus {
 	txStatus, err := signer.GetTransactionStatus(context.Background(), txHash)
-
 	if err != nil {
 		if err.Error() == ErrTxnHashNotFound.Error() {
 			logger.Infow(

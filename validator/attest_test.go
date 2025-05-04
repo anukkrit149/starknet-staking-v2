@@ -1,7 +1,6 @@
 package validator_test
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -41,17 +40,17 @@ func TestAttest(t *testing.T) {
 		serverInternalError := "Some internal server error when fetching epoch and attest info" +
 			"(internal signer test)"
 
-		mockRpc := validator.MockRpcServer(t, operationalAddress, serverInternalError)
-		defer mockRpc.Close()
+		mockRPC := validator.MockRPCServer(t, operationalAddress, serverInternalError)
+		defer mockRPC.Close()
 
 		config := &config.Config{
 			Provider: config.Provider{
-				Http: mockRpc.URL,
+				Http: mockRPC.URL,
 				Ws:   env.WsProviderUrl,
 			},
 			Signer: config.Signer{
 				OperationalAddress: operationalAddress.String(),
-				ExternalUrl:        "http://localhost:5678",
+				ExternalURL:        "http://localhost:5678",
 			},
 		}
 
@@ -79,7 +78,7 @@ func TestAttest(t *testing.T) {
 		operationalAddress := utils.HexToFelt(t, "0x456")
 		serverInternalError := "Some internal server error when fetching epoch and attest info (external signer test)"
 
-		mockRpc := validator.MockRpcServer(t, operationalAddress, serverInternalError)
+		mockRpc := validator.MockRPCServer(t, operationalAddress, serverInternalError)
 		defer mockRpc.Close()
 
 		config := &config.Config{
@@ -160,7 +159,7 @@ func TestProcessBlockHeaders(t *testing.T) {
 		targetBlockUint64 := expectedTargetBlock.Uint64()
 		mockSigner.
 			EXPECT().
-			BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockUint64}).
+			BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockUint64}).
 			Return(nil, errors.New("Block not found")) // Let's say block does not exist yet
 
 		// Headers feeder routine
@@ -258,7 +257,7 @@ func TestProcessBlockHeaders(t *testing.T) {
 		targetBlockUint64 := expectedTargetBlock1.Uint64()
 		mockSigner.
 			EXPECT().
-			BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockUint64}).
+			BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockUint64}).
 			Return(nil, errors.New("Block not found")) // Let's say block does not exist yet
 
 		// Headers feeder routine
@@ -378,7 +377,7 @@ func TestProcessBlockHeaders(t *testing.T) {
 			targetBlockUint64 := expectedTargetBlock1.Uint64()
 			mockSigner.
 				EXPECT().
-				BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockUint64}).
+				BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockUint64}).
 				Return(nil, errors.New("Block not found")) // Let's say block does not exist yet
 
 			// Headers feeder routine
@@ -497,7 +496,7 @@ func mockSuccessfullyFetchedEpochAndAttestInfo(
 
 	mockSigner.
 		EXPECT().
-		Call(context.Background(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
+		Call(t.Context(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
 		Return(
 			[]*felt.Felt{
 				epoch.StakerAddress.Felt(),
@@ -519,7 +518,7 @@ func mockSuccessfullyFetchedEpochAndAttestInfo(
 
 	mockSigner.
 		EXPECT().
-		Call(context.Background(), expectedWindowFnCall, rpc.BlockID{Tag: "latest"}).
+		Call(t.Context(), expectedWindowFnCall, rpc.BlockID{Tag: "latest"}).
 		Return([]*felt.Felt{new(felt.Felt).SetUint64(attestWindow)}, nil).
 		Times(howManyTimes)
 }
@@ -546,7 +545,7 @@ func mockFailedFetchingEpochAndAttestInfo(
 
 	mockAccount.
 		EXPECT().
-		Call(context.Background(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
+		Call(t.Context(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
 		Return(nil, errors.New(fetchingError)).
 		Times(howManyTimes)
 }
@@ -561,7 +560,7 @@ func mockHeaderFeed(
 	t.Helper()
 
 	blockHeaders := make([]rpc.BlockHeader, epochLength)
-	for i := uint64(0); i < epochLength; i++ {
+	for i := range uint64(epochLength) {
 		blockNumber := validator.BlockNumber(i) + startingBlock
 
 		// All block hashes are set to 0x1 except for the target block
@@ -589,7 +588,7 @@ func TestSetTargetBlockHashIfExists(t *testing.T) {
 		targetBlockNumber := uint64(1)
 		mockAccount.
 			EXPECT().
-			BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockNumber}).
+			BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockNumber}).
 			Return(nil, errors.New("Block not found"))
 
 		attestInfo := validator.AttestInfo{
@@ -604,7 +603,7 @@ func TestSetTargetBlockHashIfExists(t *testing.T) {
 		targetBlockNumber := uint64(1)
 		mockAccount.
 			EXPECT().
-			BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockNumber}).
+			BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockNumber}).
 			Return(&rpc.PendingBlockTxHashes{}, nil)
 
 		attestInfo := validator.AttestInfo{
@@ -625,7 +624,7 @@ func TestSetTargetBlockHashIfExists(t *testing.T) {
 		targetBlockNumber := uint64(1)
 		mockAccount.
 			EXPECT().
-			BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockNumber}).
+			BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockNumber}).
 			Return(&blockWithTxs, nil)
 
 		targetBlockHash := validator.BlockHash(*targetBlockHashFelt)
@@ -656,7 +655,7 @@ func TestFetchEpochAndAttestInfoWithRetry(t *testing.T) {
 		// 2. After the 10 retries, exit with error
 
 		validatorOperationalAddress := types.AddressFromString("0x123")
-		fetchingError := "some internal error fetching epoch info"
+		const fetchingError = "some internal error fetching epoch info"
 		mockFailedFetchingEpochAndAttestInfo(
 			t,
 			mockSigner,
@@ -670,19 +669,19 @@ func TestFetchEpochAndAttestInfoWithRetry(t *testing.T) {
 			fetchingError,
 		)
 
-		newEpochId := "123"
+		newEpochID := "123"
 		validator.Sleep = func(time.Duration) {
 			// do nothing (avoid waiting)
 		}
 		defer func() { validator.Sleep = time.Sleep }()
 
 		newEpochInfo, newAttestInfo, err := validator.FetchEpochAndAttestInfoWithRetry(
-			mockSigner, noOpLogger, nil, nil, defaultRetries(t), newEpochId,
+			mockSigner, noOpLogger, nil, nil, defaultRetries(t), newEpochID,
 		)
 
 		require.Zero(t, newEpochInfo)
 		require.Zero(t, newAttestInfo)
-		require.ErrorContains(t, err, newEpochId)
+		require.ErrorContains(t, err, newEpochID)
 		require.ErrorContains(t, err, fetchedError.Error())
 	})
 

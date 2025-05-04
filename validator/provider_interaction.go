@@ -33,11 +33,11 @@ func SubscribeToBlockHeaders[Logger utils.Logger](wsProviderUrl string, logger L
 	*client.ClientSubscription,
 	error,
 ) {
-	logger.Debugw("Initializing websocket connection", "wsProviderUrl", wsProviderUrl)
+	logger.Debugw("Initialising websocket connection", "wsProviderUrl", wsProviderUrl)
 	// This needs a timeout or something
 	wsProvider, err := rpc.NewWebsocketProvider(wsProviderUrl)
 	if err != nil {
-		return nil, nil, nil, errors.Errorf("dialing WS provider at %s: %s", wsProviderUrl, err)
+		return nil, nil, nil, errors.Errorf("dialling WS provider at %s: %s", wsProviderUrl, err)
 	}
 
 	logger.Debugw("Subscribing to new block headers")

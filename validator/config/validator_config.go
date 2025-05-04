@@ -39,7 +39,7 @@ func (p *Provider) Fill(other *Provider) {
 }
 
 type Signer struct {
-	ExternalUrl        string `json:"url"`
+	ExternalURL        string `json:"url"`
 	PrivKey            string `json:"privateKey"`
 	OperationalAddress string `json:"operationalAddress"`
 }
@@ -59,7 +59,7 @@ func (s *Signer) Check() error {
 
 func SignerFromEnv() Signer {
 	return Signer{
-		ExternalUrl:        os.Getenv("SIGNER_EXTERNAL_URL"),
+		ExternalURL:        os.Getenv("SIGNER_EXTERNAL_URL"),
 		PrivKey:            os.Getenv("SIGNER_PRIVATE_KEY"),
 		OperationalAddress: os.Getenv("SIGNER_OPERATIONAL_ADDRESS"),
 	}
@@ -67,8 +67,8 @@ func SignerFromEnv() Signer {
 
 // Merge its missing fields with data from other signer
 func (s *Signer) Fill(other *Signer) {
-	if isZero(s.ExternalUrl) {
-		s.ExternalUrl = other.ExternalUrl
+	if isZero(s.ExternalURL) {
+		s.ExternalURL = other.ExternalURL
 	}
 	if isZero(s.PrivKey) {
 		s.PrivKey = other.PrivKey
@@ -79,7 +79,7 @@ func (s *Signer) Fill(other *Signer) {
 }
 
 func (s *Signer) External() bool {
-	return s.ExternalUrl != ""
+	return s.ExternalURL != ""
 }
 
 type Config struct {

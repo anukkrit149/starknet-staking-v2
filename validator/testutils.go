@@ -43,18 +43,20 @@ func LoadEnv(t *testing.T) (EnvVariable, error) {
 
 	base := os.Getenv("HTTP_PROVIDER_URL")
 	if base == "" {
-		return EnvVariable{}, errors.New("Failed to load HTTP_PROVIDER_URL, empty string")
+		return EnvVariable{}, errors.New("failed to load HTTP_PROVIDER_URL, empty string")
 	}
 
 	wsProviderUrl := os.Getenv("WS_PROVIDER_URL")
 	if wsProviderUrl == "" {
-		return EnvVariable{}, errors.New("Failed to load WS_PROVIDER_URL, empty string")
+		return EnvVariable{}, errors.New("failed to load WS_PROVIDER_URL, empty string")
 	}
 
 	return EnvVariable{base, wsProviderUrl}, nil
 }
 
-func MockRpcServer(t *testing.T, operationalAddress *felt.Felt, serverInternalError string) *httptest.Server {
+func MockRPCServer(
+	t *testing.T, operationalAddress *felt.Felt, serverInternalError string,
+) *httptest.Server {
 	t.Helper()
 
 	mockRpc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
