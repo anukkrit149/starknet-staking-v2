@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/NethermindEth/juno/utils"
@@ -111,23 +110,16 @@ func NewCommand() cobra.Command {
 		"",
 		"Staking contract address. Defaults values are provided for Sepolia and Mainnet",
 	)
-	cmd.Flags().Uint64Var(
-		&snConfig.AttestOptions.Fee,
-		"attest-fee",
-		0,
-		"Predefined fee to pay for each attest transaction."+
-			" If not provided, a call to estimate fee is done according to"+
-			" 'estimate-attest-fee' flag value.",
-	)
-	cmd.Flags().StringVar(
-		&snConfig.AttestOptions.Recalculate,
-		"estimate-atttest-fee",
-		"once",
-		"When to perform an estimate fee call to know the cost of performing an attestation"+
-			" if no value is provided in the 'attest-fee' flag. Options:\n"+
-			" - \"once\": attest fee is estimated once and succesive calls use that value.\n"+
-			" - \"always\": an estimate fee call is done before submitting each attestation.",
-	)
+	// Disabled for now
+	// cmd.Flags().StringVar(
+	// 	&snConfig.AttestOptions,
+	// 	"attest-fee",
+	// 	"once",
+	// 	"This flag determines the fee to pay for each attest transaction."+
+	// 		" It can be either a positive number or one of the follwing options:\n"+
+	// 		" - \"once\": attest fee is estimated once and succesive calls use that value.\n"+
+	// 		" - \"always\": an estimate fee call is done before submitting each attestation.",
+	// )
 	// Other flags
 	cmd.Flags().StringVar(
 		&maxRetriesF,
@@ -146,7 +138,6 @@ func NewCommand() cobra.Command {
 func main() {
 	command := NewCommand()
 	if err := command.ExecuteContext(context.Background()); err != nil {
-		fmt.Println("Unexpected error:\n", err.Error())
 		os.Exit(1)
 	}
 }

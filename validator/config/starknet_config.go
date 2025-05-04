@@ -80,33 +80,9 @@ func (ca *ContractAddresses) String() string {
 	)
 }
 
-type recalculate int
-
-const (
-	once recalculate = iota
-	always
-	never
-)
-
-type AttestOptions struct {
-	Fee         uint64
-	Recalculate string
-}
-
-func (o *AttestOptions) Check() error {
-	if o.Recalculate != "once" && o.Recalculate != "always" {
-		return fmt.Errorf(
-			"expected recaluclate option \"once\" or \"always\""+
-				"but got \"%s\" instead.",
-			o.Recalculate,
-		)
-	}
-	return nil
-}
-
 type StarknetConfig struct {
 	ContractAddresses ContractAddresses
-	AttestOptions     AttestOptions
+	AttestOptions     string
 }
 
 func (c *StarknetConfig) SetDefaults(chainId string) *StarknetConfig {
@@ -115,8 +91,5 @@ func (c *StarknetConfig) SetDefaults(chainId string) *StarknetConfig {
 }
 
 func (c *StarknetConfig) Check() error {
-	if err := c.AttestOptions.Check(); err != nil {
-		return err
-	}
 	return c.ContractAddresses.Check()
 }

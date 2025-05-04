@@ -27,6 +27,12 @@ func Attest(
 		return err
 	}
 
+	// Ignoring from now, until Starknet.go allow us to have a fixed Starknet option
+	_, err = types.AttestFeeFromString(snConfig.AttestOptions)
+	if err != nil {
+		return err
+	}
+
 	var signer signerP.Signer
 	if config.Signer.External() {
 		externalSigner, err := signerP.NewExternalSigner(

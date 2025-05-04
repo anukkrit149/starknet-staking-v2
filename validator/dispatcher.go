@@ -66,6 +66,7 @@ func (a *AttestTracker) resetTransactionHash() {
 type EventDispatcher[S signerP.Signer] struct {
 	// Current epoch attest-related fields
 	CurrentAttest AttestTracker
+	// AttestFee     types.AttestFee
 	// Event channels
 	AttestRequired chan AttestRequired
 	EndOfWindow    chan struct{}
@@ -73,7 +74,8 @@ type EventDispatcher[S signerP.Signer] struct {
 
 func NewEventDispatcher[S signerP.Signer]() EventDispatcher[S] {
 	return EventDispatcher[S]{
-		CurrentAttest:  NewAttestTracker(),
+		CurrentAttest: NewAttestTracker(),
+		// AttestFee:      *attestFee,
 		AttestRequired: make(chan AttestRequired),
 		EndOfWindow:    make(chan struct{}),
 	}
@@ -85,6 +87,8 @@ func (d *EventDispatcher[S]) Dispatch(
 ) {
 	wg := conc.NewWaitGroup()
 	defer wg.Wait()
+
+	// var failedAttests uint64 = 0
 
 	for {
 		select {
@@ -120,7 +124,7 @@ func (d *EventDispatcher[S]) Dispatch(
 			logger.Debugw("Attest transaction sent", "hash", resp.TransactionHash)
 			d.CurrentAttest.setTransactionHash(resp.TransactionHash)
 		case <-d.EndOfWindow:
-			logger.Infow("End of window reached")
+			logger.Info("End of window reached")
 
 			if d.CurrentAttest.Status != Successful {
 				setAttestStatusOnTracking(signer, logger, &d.CurrentAttest)
