@@ -21,6 +21,7 @@ import (
 	"github.com/sourcegraph/conc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"golang.org/x/net/context"
 	"lukechampine.com/uint128"
 )
 
@@ -159,7 +160,7 @@ func TestProcessBlockHeaders(t *testing.T) {
 		targetBlockUint64 := expectedTargetBlock.Uint64()
 		mockSigner.
 			EXPECT().
-			BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockUint64}).
+			BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockUint64}).
 			Return(nil, errors.New("Block not found")) // Let's say block does not exist yet
 
 		// Headers feeder routine
@@ -257,7 +258,7 @@ func TestProcessBlockHeaders(t *testing.T) {
 		targetBlockUint64 := expectedTargetBlock1.Uint64()
 		mockSigner.
 			EXPECT().
-			BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockUint64}).
+			BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockUint64}).
 			Return(nil, errors.New("Block not found")) // Let's say block does not exist yet
 
 		// Headers feeder routine
@@ -377,7 +378,7 @@ func TestProcessBlockHeaders(t *testing.T) {
 			targetBlockUint64 := expectedTargetBlock1.Uint64()
 			mockSigner.
 				EXPECT().
-				BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockUint64}).
+				BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockUint64}).
 				Return(nil, errors.New("Block not found")) // Let's say block does not exist yet
 
 			// Headers feeder routine
@@ -496,7 +497,7 @@ func mockSuccessfullyFetchedEpochAndAttestInfo(
 
 	mockSigner.
 		EXPECT().
-		Call(t.Context(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
+		Call(context.Background(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
 		Return(
 			[]*felt.Felt{
 				epoch.StakerAddress.Felt(),
@@ -518,7 +519,7 @@ func mockSuccessfullyFetchedEpochAndAttestInfo(
 
 	mockSigner.
 		EXPECT().
-		Call(t.Context(), expectedWindowFnCall, rpc.BlockID{Tag: "latest"}).
+		Call(context.Background(), expectedWindowFnCall, rpc.BlockID{Tag: "latest"}).
 		Return([]*felt.Felt{new(felt.Felt).SetUint64(attestWindow)}, nil).
 		Times(howManyTimes)
 }
@@ -545,7 +546,7 @@ func mockFailedFetchingEpochAndAttestInfo(
 
 	mockAccount.
 		EXPECT().
-		Call(t.Context(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
+		Call(context.Background(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
 		Return(nil, errors.New(fetchingError)).
 		Times(howManyTimes)
 }
@@ -570,8 +571,8 @@ func mockHeaderFeed(
 		}
 
 		blockHeaders[i] = rpc.BlockHeader{
-			BlockNumber: blockNumber.Uint64(),
-			BlockHash:   blockHash,
+			Number: blockNumber.Uint64(),
+			Hash:   blockHash,
 		}
 	}
 	return blockHeaders
@@ -588,7 +589,7 @@ func TestSetTargetBlockHashIfExists(t *testing.T) {
 		targetBlockNumber := uint64(1)
 		mockAccount.
 			EXPECT().
-			BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockNumber}).
+			BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockNumber}).
 			Return(nil, errors.New("Block not found"))
 
 		attestInfo := validator.AttestInfo{
@@ -603,7 +604,7 @@ func TestSetTargetBlockHashIfExists(t *testing.T) {
 		targetBlockNumber := uint64(1)
 		mockAccount.
 			EXPECT().
-			BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockNumber}).
+			BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockNumber}).
 			Return(&rpc.PendingBlockTxHashes{}, nil)
 
 		attestInfo := validator.AttestInfo{
@@ -618,13 +619,13 @@ func TestSetTargetBlockHashIfExists(t *testing.T) {
 		targetBlockHashFelt := utils.HexToFelt(t, "0x123")
 		blockWithTxs := rpc.BlockTxHashes{
 			BlockHeader: rpc.BlockHeader{
-				BlockHash: targetBlockHashFelt,
+				Hash: targetBlockHashFelt,
 			},
 		}
 		targetBlockNumber := uint64(1)
 		mockAccount.
 			EXPECT().
-			BlockWithTxHashes(t.Context(), rpc.BlockID{Number: &targetBlockNumber}).
+			BlockWithTxHashes(context.Background(), rpc.BlockID{Number: &targetBlockNumber}).
 			Return(&blockWithTxs, nil)
 
 		targetBlockHash := validator.BlockHash(*targetBlockHashFelt)

@@ -23,7 +23,7 @@ func NewCommand() cobra.Command {
 	preRunE := func(_ *cobra.Command, args []string) error {
 		var err error
 
-		var logLevel utils.LogLevel
+		logLevel := utils.NewLogLevel(utils.INFO)
 		if err := logLevel.Set(logLevelF); err != nil {
 			return err
 		}

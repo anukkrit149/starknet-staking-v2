@@ -17,7 +17,9 @@ import (
 //go:generate go tool mockgen -destination=../../mocks/mock_signer.go -package=mocks github.com/NethermindEth/starknet-staking-v2/validator/signer Signer
 type Signer interface {
 	// Methods from Starknet.go Account implementation
-	GetTransactionStatus(ctx context.Context, transactionHash *felt.Felt) (*rpc.TxnStatusResp, error)
+	GetTransactionStatus(
+		ctx context.Context, transactionHash *felt.Felt,
+	) (*rpc.TxnStatusResult, error)
 	BuildAndSendInvokeTxn(
 		ctx context.Context, functionCalls []rpc.InvokeFunctionCall, multiplier float64,
 	) (*rpc.AddInvokeTransactionResponse, error)

@@ -124,10 +124,10 @@ func ProcessBlockHeaders[Account signerP.Signer](
 	SetTargetBlockHashIfExists(account, logger, &attestInfo)
 
 	for blockHeader := range headersFeed {
-		logger.Infof("Block %d received", blockHeader.BlockNumber)
+		logger.Infof("Block %d received", blockHeader.Number)
 		logger.Debugw("Block header information", "block header", blockHeader)
 
-		if blockHeader.BlockNumber == epochInfo.CurrentEpochStartingBlock.Uint64()+epochInfo.EpochLen {
+		if blockHeader.Number == epochInfo.CurrentEpochStartingBlock.Uint64()+epochInfo.EpochLen {
 			logger.Infow("New epoch start", "epoch id", epochInfo.EpochId+1)
 			prevEpochInfo := epochInfo
 			epochInfo, attestInfo, err = FetchEpochAndAttestInfoWithRetry(
@@ -143,12 +143,12 @@ func ProcessBlockHeaders[Account signerP.Signer](
 			}
 		}
 
-		if BlockNumber(blockHeader.BlockNumber) == attestInfo.TargetBlock {
-			attestInfo.TargetBlockHash = BlockHash(*blockHeader.BlockHash)
+		if BlockNumber(blockHeader.Number) == attestInfo.TargetBlock {
+			attestInfo.TargetBlockHash = BlockHash(*blockHeader.Hash)
 			logger.Infow(
 				"Target block reached",
-				"block number", blockHeader.BlockNumber,
-				"block hash", blockHeader.BlockHash,
+				"block number", blockHeader.Number,
+				"block hash", blockHeader.Hash,
 			)
 			logger.Infow("Window to attest to",
 				"start", attestInfo.WindowStart,
@@ -156,14 +156,14 @@ func ProcessBlockHeaders[Account signerP.Signer](
 			)
 		}
 
-		if BlockNumber(blockHeader.BlockNumber) >= attestInfo.WindowStart-1 &&
-			BlockNumber(blockHeader.BlockNumber) < attestInfo.WindowEnd {
+		if BlockNumber(blockHeader.Number) >= attestInfo.WindowStart-1 &&
+			BlockNumber(blockHeader.Number) < attestInfo.WindowEnd {
 			dispatcher.AttestRequired <- AttestRequired{
 				BlockHash: attestInfo.TargetBlockHash,
 			}
 		}
 
-		if BlockNumber(blockHeader.BlockNumber) == attestInfo.WindowEnd {
+		if BlockNumber(blockHeader.Number) == attestInfo.WindowEnd {
 			dispatcher.EndOfWindow <- struct{}{}
 		}
 	}
@@ -184,7 +184,7 @@ func SetTargetBlockHashIfExists[Account signerP.Signer](
 	// If no error, then target block already exists
 	if err == nil {
 		if block, ok := res.(*rpc.BlockTxHashes); ok {
-			attestInfo.TargetBlockHash = BlockHash(*block.BlockHash)
+			attestInfo.TargetBlockHash = BlockHash(*block.Hash)
 			logger.Infow(
 				"Target block already exists. Registering block hash.",
 				"target block", attestInfo.TargetBlock.Uint64(),

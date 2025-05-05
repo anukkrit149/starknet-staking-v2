@@ -57,14 +57,16 @@ func NewCommand() cobra.Command {
 		}
 		maxRetries = parsedRetries
 
-		var logLevel utils.LogLevel
+		logLevel := utils.NewLogLevel(utils.INFO)
 		if err := logLevel.Set(logLevelF); err != nil {
 			return err
 		}
+
 		loadedLogger, err := utils.NewZapLogger(logLevel, true)
 		if err != nil {
 			return err
 		}
+
 		logger = *loadedLogger
 
 		return nil

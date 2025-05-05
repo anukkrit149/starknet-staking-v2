@@ -1,6 +1,7 @@
 package signer_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,7 +70,7 @@ func TestNewInternalSigner(t *testing.T) {
 		}
 
 		// Test
-		logger, _ := utils.NewZapLogger(utils.DEBUG, true)
+		logger := utils.NewNopZapLogger()
 		internalSigner, err := signer.NewInternalSigner(
 			provider, logger, &configSigner, contractAddresses,
 		)
@@ -298,7 +299,7 @@ func TestFetchEpochInfo(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
 			Return(nil, errors.New("some contract error"))
 
 		epochInfo, err := signer.FetchEpochInfo(mockSigner)
@@ -323,13 +324,19 @@ func TestFetchEpochInfo(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
 			Return([]*felt.Felt{new(felt.Felt).SetUint64(1)}, nil)
 
 		epochInfo, err := signer.FetchEpochInfo(mockSigner)
 
 		require.Equal(t, validator.EpochInfo{}, epochInfo)
-		require.Equal(t, errors.New("Invalid response from entrypoint `get_attestation_info_by_operational_address`"), err)
+		require.Equal(
+			t,
+			errors.New(
+				"Invalid response from entrypoint `get_attestation_info_by_operational_address`",
+			),
+			err,
+		)
 	})
 
 	t.Run("Successful contract call", func(t *testing.T) {
@@ -359,7 +366,7 @@ func TestFetchEpochInfo(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
 			Return(
 				[]*felt.Felt{stakerAddress, stake, epochLen, epochID, currentEpochStartingBlock},
 				nil,
@@ -399,7 +406,7 @@ func TestFetchAttestWindow(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
 			Return(nil, errors.New("some contract error"))
 
 		mockSigner.EXPECT().ValidationContracts().Return(
@@ -421,7 +428,7 @@ func TestFetchAttestWindow(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
 			Return([]*felt.Felt{}, nil)
 
 		mockSigner.EXPECT().ValidationContracts().Return(
@@ -443,7 +450,7 @@ func TestFetchAttestWindow(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
 			Return([]*felt.Felt{new(felt.Felt).SetUint64(16)}, nil)
 
 		mockSigner.EXPECT().ValidationContracts().Return(
@@ -481,7 +488,7 @@ func TestFetchValidatorBalance(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
 			Return(nil, errors.New("some contract error"))
 
 		balance, err := signer.FetchValidatorBalance(mockSigner)
@@ -503,7 +510,7 @@ func TestFetchValidatorBalance(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
 			Return([]*felt.Felt{}, nil)
 
 		balance, err := signer.FetchValidatorBalance(mockSigner)
@@ -525,7 +532,7 @@ func TestFetchValidatorBalance(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
 			Return([]*felt.Felt{new(felt.Felt).SetUint64(1)}, nil)
 
 		balance, err := signer.FetchValidatorBalance(mockSigner)
@@ -557,7 +564,7 @@ func TestFetchEpochAndAttestInfo(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedFnCall, rpc.BlockID{Tag: "latest"}).
 			Return(nil, errors.New("some contract error"))
 
 		mockSigner.EXPECT().ValidationContracts().Return(
@@ -593,7 +600,7 @@ func TestFetchEpochAndAttestInfo(t *testing.T) {
 		epochStartingBlock := uint64(5)
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
 			Return([]*felt.Felt{
 				new(felt.Felt).SetUint64(1),
 				new(felt.Felt).SetUint64(2),
@@ -610,7 +617,7 @@ func TestFetchEpochAndAttestInfo(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedWindowFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedWindowFnCall, rpc.BlockID{Tag: "latest"}).
 			Return(nil, errors.New("some contract error"))
 
 		epochInfo, attestInfo, err := signer.FetchEpochAndAttestInfo(mockSigner, logger)
@@ -649,7 +656,7 @@ func TestFetchEpochAndAttestInfo(t *testing.T) {
 
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedEpochInfoFnCall, rpc.BlockID{Tag: "latest"}).
 			Return(
 				[]*felt.Felt{
 					stakerAddress,
@@ -671,7 +678,7 @@ func TestFetchEpochAndAttestInfo(t *testing.T) {
 		attestWindow := uint64(16)
 		mockSigner.
 			EXPECT().
-			Call(t.Context(), expectedWindowFnCall, rpc.BlockID{Tag: "latest"}).
+			Call(context.Background(), expectedWindowFnCall, rpc.BlockID{Tag: "latest"}).
 			Return([]*felt.Felt{new(felt.Felt).SetUint64(attestWindow)}, nil)
 
 		// Test
@@ -717,7 +724,7 @@ func TestInvokeAttest(t *testing.T) {
 		mockSigner.
 			EXPECT().
 			BuildAndSendInvokeTxn(
-				t.Context(), expectedFnCall, constants.FEE_ESTIMATION_MULTIPLIER,
+				context.Background(), expectedFnCall, constants.FEE_ESTIMATION_MULTIPLIER,
 			).
 			Return(nil, errors.New("some sending error"))
 
@@ -747,7 +754,7 @@ func TestInvokeAttest(t *testing.T) {
 		mockSigner.
 			EXPECT().
 			BuildAndSendInvokeTxn(
-				t.Context(),
+				context.Background(),
 				expectedFnCall,
 				constants.FEE_ESTIMATION_MULTIPLIER,
 			).

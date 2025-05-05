@@ -65,7 +65,7 @@ func NewInternalSigner(
 
 func (v *InternalSigner) GetTransactionStatus(
 	ctx context.Context, transactionHash *felt.Felt,
-) (*rpc.TxnStatusResp, error) {
+) (*rpc.TxnStatusResult, error) {
 	return v.Account.Provider.GetTransactionStatus(ctx, transactionHash)
 }
 
@@ -74,7 +74,7 @@ func (v *InternalSigner) BuildAndSendInvokeTxn(
 	functionCalls []rpc.InvokeFunctionCall,
 	multiplier float64,
 ) (*rpc.AddInvokeTransactionResponse, error) {
-	return v.Account.BuildAndSendInvokeTxn(ctx, functionCalls, multiplier)
+	return v.Account.BuildAndSendInvokeTxn(ctx, functionCalls, multiplier, true)
 }
 
 func (v *InternalSigner) Call(
@@ -90,7 +90,7 @@ func (v *InternalSigner) BlockWithTxHashes(
 }
 
 func (v *InternalSigner) Address() *Address {
-	return (*Address)(v.AccountAddress)
+	return (*Address)(v.Account.Address)
 }
 
 func (v *InternalSigner) ValidationContracts() *ValidationContracts {
