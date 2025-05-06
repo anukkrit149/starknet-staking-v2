@@ -9,9 +9,9 @@ Validator software written in Go for Starknet staking v2 as specified in [SNIP 2
 
 ## Installation
 
-The tool can be either built from source or pulled from docker
+The tool can be either built from source or pulled from docker. Aditionally we offer pre-compiles, check our [release page](https://github.com/NethermindEth/starknet-staking-v2/releases).
 
-### Build from Source
+### Building from source
 
 Requires having the [GO compiler](https://go.dev/doc/install) with version `1.24` or above. Once installed run:
 
@@ -23,12 +23,12 @@ This will compile the project and place the binary in *./build/validator*.
 
 ### Using docker
 
-Make sure you've [Docker] installed and run:
+Make sure you've [Docker](https://www.docker.com/) installed and run:
 ```bash
 docker pull nethermind/starknet-staking-v2
 ```
 
-## Configuration and execution
+## Validator configuration and execution
 
 To run the validator it needs certain data specified such as the Starknet node to connect to and the operational address of the staker.
 This data can be provided through several ways, in order of (decreasing) priority:
@@ -43,10 +43,14 @@ The validator can be run with:
 ./build/validator --config <path_to_config_file>
 ```
 
-The config file is `.json` which specifies two types `provider` and `signer`. For the `provider`, it requires an *http* and *websocket* endpoints to a starknet node that supports rpc version `0.8.0` or higher. Those endpoints are used to listen information from the network.
+The config file is `.json` which specifies two main fields `provider` and `signer`. For the `provider`, it requires an *http* and *websocket* endpoints to a starknet node that supports rpc version `0.8.1` or higher. Those endpoints are used to listen information from the network.
 
-For the `signer`, you need to specify the `operationalAddress` and either a `privateKey` or external `url`. By specifing your `privateKey` the program will sign the transactions using it. If you specify an `url` the program is going to ask through that `url` for the transaction to be signed. The only transaction that requires signing are the **attest** transactions.
-Through the use of an `url` for external signing the program remains agnostic over the users private key. The `url` should point to an *http* address through which this program and the signer program will communicate. The way this communication happens is specified [here](#external-signer).
+For the `signer`, you need to specify the *operational address* and a signing method. 
+The signing method can be either internal to the tool or asked externally, based on if you provide a *private key* or an external *url*:
+1. By provding a *private key* the program will sign the transactions internally.
+2. By providing an external *url* to program from which the validator will ask for signatures, see exactly how [here](#external-signer).
+3. If both are provided, the validator will use the remote signer over the internal one.
+
 
 A full configuration file looks like this:
 
@@ -64,7 +68,9 @@ A full configuration file looks like this:
 }
 ```
 
-#### With Docker
+Note that because both `url` and `privateKey` fields are set in the previous example the tool will prioritize remote signing through the `url` than internally signing with the `privateKey`. Be sure to  be explicit on your configuration file and leave just one of them.
+
+#### Example with Docker
 
 To run the validator using Docker, prepare a valid config file locally and mount it into the container:
 
@@ -75,7 +81,7 @@ docker run \
 ```
 
 ### With Environment Variables
-Similarly described as the previous section, the validator can be configured using environment vars. The following example using a `.env` file:
+Alternatively, similarly as described as the previous section, the validator can be configured using environment vars. The following example using a `.env` file with the following content:
 
 ```bash
 PROVIDER_HTTP_URL="http://localhost:6060/v0_8"
@@ -86,7 +92,8 @@ SIGNER_OPERATIONAL_ADDRESS="0x123"
 SIGNER_PRIVATE_KEY="0x456"
 ```
 
-Then run
+Source the enviroment vars and run the validator:
+
 ```bash
 source path/to/env
 
@@ -95,7 +102,7 @@ source path/to/env
 
 
 ### With flags
-The following command runs the validator and provides all the necessary information about provider and signer through the use of flags:
+Finally, as a third alternative, you can specify the necessary validation configuration through flags as well:
 
 ```bash
 ./build/validator \
@@ -106,23 +113,10 @@ The following command runs the validator and provides all the necessary informat
     --signer-priv-key "0x456"
 ```
 
-#### With Docker
-
-To run the validator using Docker without a config file, just make sure to pass all the required flags.
-
-```bash
-docker run \
-    nethermind/starknet-staking-v2:latest \
-        --provider-http "http://localhost:6060/v0_8" \
-        --provider-ws "ws://localhost:6061/v0_8" \
-        --signer-url "http//localhost:8080" \
-        --signer-op-address "0x123" \
-        --signer-priv-key "0x456"
-```
 
 ### Mixed configuration approach
 
-Using a combination of both approaches is also valid. In this case, the values provided by the flags override the values by the environment vars which in turn override the values provided by the configuration file. 
+Using a combination of both approaches is also valid. Values set by flags will override values set by enviroment flags and values set by enviroment flags will override values set in a configuration file.
 
 ```bash
 PROVIDER_HTTP_URL="http://localhost:6060/v0_8" ./build/validator \
@@ -133,13 +127,56 @@ PROVIDER_HTTP_URL="http://localhost:6060/v0_8" ./build/validator \
     --private-key "0x456"
 ```
 
+## Additional configurations
+
+In addition to the configuration described above, the tool allows for other non-essential customization. You can see all available options by using the `--help` flag:
+
+1. Using specific staking and attestation contract addresses through the `--staking-contract-address` and `--attest-contract-address` flags respectively. If no values are provided, sensible defaults are provided based on the network id.
+
+2. `--max-tries` allows you to set how many attempts the tool does to get attestation information. It can be set to any positive number or to _"infinite"_ if you want the tool to never stop execution. Defaults to 10.
+
+3. `--log-level` set's the tool logging level. Default to `info`.
+
+## Example with Juno
+
+Once you have your own [Juno](https://github.com/NethermindEth/juno) node set either built from source or through docker. 
+
+Run it and be sure to specify both `http` and `ws` flags set. These prepare your node to receive both *http* and *websocket* requests, required by the validator for full communication with the node.
+One example using a Juno binary built from source:
+
+```bash
+./build/juno
+  --db-path /var/lib/juno \
+  --eth-node <YOUR-ETH-NODE>
+  --http \
+  --http-port 6060 \
+  --ws \
+  --ws-port 6061 \
+```
+
+The configuration file properties for internal signing will look like:
+```json
+{
+  "provider": {
+      "http": "http://localhost:6060/v0_8",
+      "ws": "ws://localhost:6061/v0_8"
+  },
+  "signer": {
+      "operationalAddress": "your operational address",
+      "privateKey": "your private key"
+  }
+}
+```
+
 ## External Signer
 
-To avoid users exposing their private keys our Validator program is capable of communicating with another process independent from the one provided here.
+> This section explains how the external signer works. If you don't plan to run the validator on an unsafe enviroment (such as the cloud) you probably don't need it.
+ 
+To avoid users exposing their private keys the validator program has a simple communication protocol implemented via http requests for remote/external signing.
 
-This external signer must implement a simple HTTP server that waits for `POST` requests on an endpoint of the form `<signer_address>/sign`. This `<signer_address>` is the same one that should be specified when initializing the validator tool in the `signer-url` flag.
+The external signer must implement a simple HTTP server that waits for `POST` requests on an endpoint of the form `<signer_address>/sign`. When initializing the validator the `<signer_address>` should be specified in it's configuration (e.g. specifying `--signer-url` flag).
 
-The `POST` request will have the following form:
+The validator will make `POST` request with all the transaction data to sign:
 ```json
 {
   "transaction": {
@@ -182,7 +219,7 @@ The `POST` request will have the following form:
 }
 ```
 
-And answer with the ECDSA signature values `r` and `s` in an array:
+It will wait for a ECDSA signature values `r` and `s` in an array:
 ```json
 {
   "signature": [
@@ -193,22 +230,26 @@ And answer with the ECDSA signature values `r` and `s` in an array:
 
 ```
 
-We have provided a functional implementation [here](https://github.com/NethermindEth/starknet-staking-v2/tree/main/signer/signer.go) for you to try and use as an example if you want to implement your own.
+We have provided an already functional implementation [here](https://github.com/NethermindEth/starknet-staking-v2/tree/main/signer/signer.go) for you to use or take as an example to implement your own.
 
-### Try out our external signer
+### Example
 
-First make sure you compile it from source with:
+This is example simulates the interaction validator and remote signer using our own implemented signer. Start by compiling the remote signer:
+
 ```bash
 make signer
 ```
 
-Then execute it with:
+Then set a private key which will be used to sign transactions and the http address where the signer will recieve post requests from the validator program. For example using private key `0x123`:
+
 ```bash
 SIGNER_PRIVATE_KEY="0x123" ./build/signer \
     --address localhost:8080
 ```
 
-*On a separate terminal*, simulate the request for signing using the following request:
+This will start the program and will remain there listening for requests.
+
+*On a separate terminal*, send a transaction data and requests it's signing. For example:
 ```bash
 curl -X POST http://localhost:8080/sign \
   -H "Content-Type: application/json" \
@@ -253,7 +294,7 @@ curl -X POST http://localhost:8080/sign \
   }'
 ```
 
-You should get the following answer:
+You should immediatly get the following answer provided you used the same private key and transaction data showed as an example:
 ```json
 {
   "signature": [
@@ -263,43 +304,7 @@ You should get the following answer:
 }
 ```
 
-This type of communication is exactly what will happen behind the curtains when using the validator tool and the signer each time there is an attestation required. This way you don't have to trust the software to protect your key.
-
-
-## Logging
-
-You have the possibility to give an additional flag `--log-level [info/debug/trace/warn/error]` to control the level of logging.
-If not set, the log level will default to `info`.
-
-## Example with Juno
-
-Once you have your own node set either built from source or through docker. [See how](https://github.com/NethermindEth/juno?tab=readme-ov-file#run-with-docker).
-
-Run your node with both the `http` and `ws` flags set. One example using Juno built from source:
-
-```bash
-./build/juno
-  --db-path /var/lib/juno \
-  --eth-node <YOUR-ETH-NODE>
-  --http \
-  --http-port 6060 \
-  --ws \
-  --ws-port 6061 \
-```
-
-The configuration file properties for local signing will look like:
-```json
-{
-  "provider": {
-      "http": "http://localhost:6060/v0_8",
-      "ws": "ws://localhost:1235/v0_8"
-  },
-  "signer": {
-      "operationalAddress": "your operational address",
-      "privateKey": "your private key"
-  }
-}
-```
+This communication is what will happen behind the curtains when using the validator and an external signer each time there is an attestation required. Notice that the validator program remains completly agnostic to the private key since only the remote signer knows it.
 
 ## Contact us
 
