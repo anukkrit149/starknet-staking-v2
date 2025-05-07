@@ -7,6 +7,7 @@ import (
 
 	"github.com/NethermindEth/juno/core/felt"
 	"github.com/NethermindEth/juno/utils"
+	"github.com/NethermindEth/starknet-staking-v2/validator/metrics"
 	signerP "github.com/NethermindEth/starknet-staking-v2/validator/signer"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/sourcegraph/conc"
@@ -84,6 +85,7 @@ func NewEventDispatcher[S signerP.Signer]() EventDispatcher[S] {
 func (d *EventDispatcher[S]) Dispatch(
 	signer S,
 	logger *utils.ZapLogger,
+	metricsServer *metrics.Metrics,
 ) {
 	wg := conc.NewWaitGroup()
 	defer wg.Wait()
@@ -112,6 +114,7 @@ func (d *EventDispatcher[S]) Dispatch(
 			d.CurrentAttest.setOngoing()
 
 			logger.Infow("Invoking attest", "block hash", event.BlockHash.String())
+
 			resp, err := signerP.InvokeAttest(signer, &event)
 			if err != nil {
 				logger.Errorw(
@@ -119,8 +122,16 @@ func (d *EventDispatcher[S]) Dispatch(
 				)
 				d.CurrentAttest.setFailed()
 				d.CurrentAttest.resetTransactionHash()
+
+				// Record attestation failure in metrics
+				metricsServer.RecordAttestationFailure(ChainID)
+
 				continue
 			}
+
+			// Record attestation submission in metrics
+			metricsServer.RecordAttestationSubmitted(ChainID)
+
 			logger.Debugw("Attest transaction sent", "hash", resp.TransactionHash)
 			d.CurrentAttest.setTransactionHash(resp.TransactionHash)
 		case <-d.EndOfWindow:
@@ -135,6 +146,9 @@ func (d *EventDispatcher[S]) Dispatch(
 					"Successfully attested to target block",
 					"target block hash", d.CurrentAttest.Event.BlockHash.String(),
 				)
+
+				// Record attestation confirmation in metrics
+				metricsServer.RecordAttestationConfirmed(ChainID)
 			} else {
 				logger.Warnw(
 					"Failed to attest to target block",

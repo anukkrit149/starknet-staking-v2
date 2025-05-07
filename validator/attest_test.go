@@ -13,6 +13,7 @@ import (
 	"github.com/NethermindEth/starknet-staking-v2/validator"
 	"github.com/NethermindEth/starknet-staking-v2/validator/config"
 	"github.com/NethermindEth/starknet-staking-v2/validator/constants"
+	"github.com/NethermindEth/starknet-staking-v2/validator/metrics"
 	signerP "github.com/NethermindEth/starknet-staking-v2/validator/signer"
 	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/NethermindEth/starknet.go/rpc"
@@ -59,7 +60,9 @@ func TestAttest(t *testing.T) {
 		defer func() { validator.Sleep = time.Sleep }()
 
 		logger := utils.NewNopZapLogger()
-		err = validator.Attest(config, sepoliaConfig, defaultRetries(t), *logger)
+		ctx := context.Background()
+		metricsServer := mockMetricsServer()
+		err = validator.Attest(ctx, config, sepoliaConfig, defaultRetries(t), *logger, metricsServer)
 
 		expectedErrorMsg := fmt.Sprintf(
 			"Error when calling entrypoint `get_attestation_info_by_operational_address`: -32603 The error is not a valid RPC error: %d Internal Server Error: %s",
@@ -99,7 +102,9 @@ func TestAttest(t *testing.T) {
 		defer func() { validator.Sleep = time.Sleep }()
 
 		logger := utils.NewNopZapLogger()
-		err = validator.Attest(config, sepoliaConfig, defaultRetries(t), *logger)
+		ctx := context.Background()
+		metricsServer := mockMetricsServer()
+		err = validator.Attest(ctx, config, sepoliaConfig, defaultRetries(t), *logger, metricsServer)
 
 		expectedErrorMsg := fmt.Sprintf(
 			"Error when calling entrypoint `get_attestation_info_by_operational_address`: -32603 The error is not a valid RPC error: %d Internal Server Error: %s",
@@ -182,8 +187,9 @@ func TestProcessBlockHeaders(t *testing.T) {
 			},
 		)
 
+		metricsServer := mockMetricsServer()
 		err := validator.ProcessBlockHeaders(
-			headersFeed, mockSigner, logger, &dispatcher, defaultRetries(t),
+			headersFeed, mockSigner, logger, &dispatcher, defaultRetries(t), metricsServer,
 		)
 		require.NoError(t, err)
 
@@ -275,12 +281,14 @@ func TestProcessBlockHeaders(t *testing.T) {
 		wgDispatcher := conc.NewWaitGroup()
 		wgDispatcher.Go(func() { registerReceivedEvents(t, &dispatcher, receivedAttestEvents, &receivedEndOfWindowEvents) })
 
+		metricsServer := mockMetricsServer()
 		err := validator.ProcessBlockHeaders(
 			headersFeed,
 			mockSigner,
 			logger,
 			&dispatcher,
 			defaultRetries(t),
+			metricsServer,
 		)
 		require.NoError(t, err)
 
@@ -406,8 +414,9 @@ func TestProcessBlockHeaders(t *testing.T) {
 			}
 			defer func() { validator.Sleep = time.Sleep }()
 
+			metricsServer := mockMetricsServer()
 			err := validator.ProcessBlockHeaders(
-				headersFeed, mockSigner, logger, &dispatcher, defaultRetries(t),
+				headersFeed, mockSigner, logger, &dispatcher, defaultRetries(t), metricsServer,
 			)
 
 			// wgFeed is trying to send the 2nd epoch's blocks and is now stuck there because
@@ -822,4 +831,10 @@ func defaultRetries(t *testing.T) types.Retries {
 	r := types.NewRetries()
 	r.Set(10)
 	return r
+}
+
+func mockMetricsServer() *metrics.Metrics {
+	// Create a mock metrics server for testing
+	logger := utils.NewNopZapLogger()
+	return metrics.NewMetrics(logger, ":9090")
 }

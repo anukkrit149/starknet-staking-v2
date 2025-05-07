@@ -7,6 +7,7 @@ import (
 
 	"github.com/NethermindEth/juno/utils"
 	"github.com/NethermindEth/starknet-staking-v2/validator/config"
+	"github.com/NethermindEth/starknet-staking-v2/validator/metrics"
 	signerP "github.com/NethermindEth/starknet-staking-v2/validator/signer"
 	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/NethermindEth/starknet.go/rpc"
@@ -19,10 +20,12 @@ const Version = "0.2.0"
 // Main execution loop of the program. Listens to the blockchain and sends
 // attest invoke when it's the right time
 func Attest(
+	ctx context.Context,
 	config *config.Config,
 	snConfig *config.StarknetConfig,
 	maxRetries types.Retries,
 	logger utils.ZapLogger,
+	metricsServer *metrics.Metrics,
 ) error {
 	provider, err := NewProvider(config.Provider.Http, &logger)
 	if err != nil {
@@ -57,20 +60,22 @@ func Attest(
 
 	dispatcher := NewEventDispatcher[signerP.Signer]()
 	wg := conc.NewWaitGroup()
-	wg.Go(func() { dispatcher.Dispatch(signer, &logger) })
+	wg.Go(func() { dispatcher.Dispatch(signer, &logger, metricsServer) })
 	defer wg.Wait()
 	defer close(dispatcher.AttestRequired)
 
-	return RunBlockHeaderWatcher(config, &logger, signer, &dispatcher, maxRetries, wg)
+	return RunBlockHeaderWatcher(ctx, config, &logger, signer, &dispatcher, maxRetries, wg, metricsServer)
 }
 
 func RunBlockHeaderWatcher[Account signerP.Signer](
+	ctx context.Context,
 	config *config.Config,
 	logger *utils.ZapLogger,
 	signer Account,
 	dispatcher *EventDispatcher[Account],
 	maxRetries types.Retries,
 	wg *conc.WaitGroup,
+	metricsServer *metrics.Metrics,
 ) error {
 	cleanUp := func(wsProvider *rpc.WsProvider, headersFeed chan *rpc.BlockHeader) {
 		wsProvider.Close()
@@ -88,7 +93,7 @@ func RunBlockHeaderWatcher[Account signerP.Signer](
 		stopProcessingHeaders := make(chan error)
 
 		wg.Go(func() {
-			err := ProcessBlockHeaders(headersFeed, signer, logger, dispatcher, maxRetries)
+			err := ProcessBlockHeaders(headersFeed, signer, logger, dispatcher, maxRetries, metricsServer)
 			if err != nil {
 				stopProcessingHeaders <- err
 			}
@@ -112,6 +117,7 @@ func ProcessBlockHeaders[Account signerP.Signer](
 	logger *utils.ZapLogger,
 	dispatcher *EventDispatcher[Account],
 	maxRetries types.Retries,
+	metricsServer *metrics.Metrics,
 ) error {
 	noEpochSwitch := func(*EpochInfo, *EpochInfo) bool { return true }
 	epochInfo, attestInfo, err := FetchEpochAndAttestInfoWithRetry(
@@ -121,11 +127,17 @@ func ProcessBlockHeaders[Account signerP.Signer](
 		return err
 	}
 
+	// Update initial epoch info metrics
+	metricsServer.UpdateEpochInfo(ChainID, &epochInfo, attestInfo.TargetBlock.Uint64())
+
 	SetTargetBlockHashIfExists(account, logger, &attestInfo)
 
 	for blockHeader := range headersFeed {
 		logger.Infof("Block %d received", blockHeader.Number)
 		logger.Debugw("Block header information", "block header", blockHeader)
+
+		// Update latest block number metric
+		metricsServer.UpdateLatestBlockNumber(ChainID, blockHeader.Number)
 
 		if blockHeader.Number == epochInfo.CurrentEpochStartingBlock.Uint64()+epochInfo.EpochLen {
 			logger.Infow("New epoch start", "epoch id", epochInfo.EpochId+1)
@@ -141,6 +153,9 @@ func ProcessBlockHeaders[Account signerP.Signer](
 			if err != nil {
 				return err
 			}
+
+			// Update epoch info metrics
+			metricsServer.UpdateEpochInfo(ChainID, &epochInfo, attestInfo.TargetBlock.Uint64())
 		}
 
 		if BlockNumber(blockHeader.Number) == attestInfo.TargetBlock {
