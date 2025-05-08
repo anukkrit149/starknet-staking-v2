@@ -190,7 +190,7 @@ func SetTargetBlockHashIfExists[Account signerP.Signer](
 				"target block", attestInfo.TargetBlock.Uint64(),
 				"block hash", attestInfo.TargetBlockHash.String(),
 				"window start", attestInfo.WindowStart.Uint64(),
-				"window end", attestInfo.WindowStart.Uint64(),
+				"window end", attestInfo.WindowEnd.Uint64(),
 			)
 		}
 	}
