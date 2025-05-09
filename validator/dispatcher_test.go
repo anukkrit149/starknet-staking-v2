@@ -10,6 +10,7 @@ import (
 	"github.com/NethermindEth/starknet-staking-v2/validator"
 	"github.com/NethermindEth/starknet-staking-v2/validator/config"
 	"github.com/NethermindEth/starknet-staking-v2/validator/constants"
+	"github.com/NethermindEth/starknet-staking-v2/validator/metrics"
 	"github.com/NethermindEth/starknet-staking-v2/validator/types"
 	"github.com/NethermindEth/starknet.go/rpc"
 	"github.com/cockroachdb/errors"
@@ -50,9 +51,12 @@ func TestDispatch(t *testing.T) {
 			validator.SepoliaValidationContracts(t),
 		).Times(1)
 
+		// Create a mock metrics server
+		metricsServer := metrics.NewMockMetricsForTest(logger)
+
 		// Start routine
 		wg := &conc.WaitGroup{}
-		wg.Go(func() { dispatcher.Dispatch(mockAccount, logger) })
+		wg.Go(func() { dispatcher.Dispatch(mockAccount, logger, metricsServer) })
 
 		// Send event
 		blockHash := validator.BlockHash(*blockHashFelt)
@@ -113,9 +117,12 @@ func TestDispatch(t *testing.T) {
 				validator.SepoliaValidationContracts(t),
 			).Times(1)
 
+			// Create a mock metrics server
+			metricsServer := metrics.NewMockMetricsForTest(logger)
+
 			// Start routine
 			wg := &conc.WaitGroup{}
-			wg.Go(func() { dispatcher.Dispatch(mockAccount, logger) })
+			wg.Go(func() { dispatcher.Dispatch(mockAccount, logger, metricsServer) })
 
 			// Send the same event x3
 			blockHash := validator.BlockHash(*blockHashFelt)
@@ -194,9 +201,12 @@ func TestDispatch(t *testing.T) {
 			validator.SepoliaValidationContracts(t),
 		).Times(1)
 
+		// Create a mock metrics server
+		metricsServer := metrics.NewMockMetricsForTest(logger)
+
 		// Start routine
 		wg := &conc.WaitGroup{}
-		wg.Go(func() { dispatcher.Dispatch(mockAccount, logger) })
+		wg.Go(func() { dispatcher.Dispatch(mockAccount, logger, metricsServer) })
 
 		// Send the same event x3
 		blockHash := validator.BlockHash(*blockHashFelt)
@@ -288,9 +298,12 @@ func TestDispatch(t *testing.T) {
 				validator.SepoliaValidationContracts(t),
 			).Times(1)
 
+			// Create a mock metrics server
+			metricsServer := metrics.NewMockMetricsForTest(logger)
+
 			// Start routine
 			wg := &conc.WaitGroup{}
-			wg.Go(func() { dispatcher.Dispatch(mockAccount, logger) })
+			wg.Go(func() { dispatcher.Dispatch(mockAccount, logger, metricsServer) })
 
 			// Send the same event x2
 			blockHash := validator.BlockHash(*blockHashFelt)
@@ -409,9 +422,12 @@ func TestDispatch(t *testing.T) {
 			validator.SepoliaValidationContracts(t),
 		).Times(2)
 
+		// Create a mock metrics server
+		metricsServer := metrics.NewMockMetricsForTest(logger)
+
 		// Start routine
 		wg := &conc.WaitGroup{}
-		wg.Go(func() { dispatcher.Dispatch(mockAccount, logger) })
+		wg.Go(func() { dispatcher.Dispatch(mockAccount, logger, metricsServer) })
 
 		// Send event A
 		blockHashA := validator.BlockHash(*blockHashFeltA)
