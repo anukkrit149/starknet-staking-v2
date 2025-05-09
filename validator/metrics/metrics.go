@@ -116,7 +116,10 @@ func NewMetrics(logger *utils.ZapLogger, address string) *Metrics {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, err := w.Write([]byte("OK"))
+		if err != nil {
+			m.logger.Errorf("Failed to write health check response: %v", err)
+		}
 	})
 	mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
