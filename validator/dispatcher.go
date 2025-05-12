@@ -123,13 +123,12 @@ func (d *EventDispatcher[S]) Dispatch(
 				)
 
 				if strings.Contains(err.Error(), "Attestation is done for this epoch") {
-					metricsServer.RecordAttestationConfirmed(ChainID)
 					logger.Infow(
 						"Attestation is done for this epoch",
 						"block hash", event.BlockHash.String(),
 					)
 					d.CurrentAttest.setSuccessful()
-					return
+					continue
 				}
 
 				d.CurrentAttest.setFailed()
